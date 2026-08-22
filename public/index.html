@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estuda+</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0e16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Estuda+">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg:#0a0e16; --card:#121a2b; --card2:#0f1626; --line:#1e2a40;
+    --txt:#e8eef7; --mut:#8295b3; --cyan:#2fa64a; --cyan-d:#17833a; --gold:#ffc24b; --green:#43e08a;
+  }
+  html.light{--bg:#f2f5f9;--card:#ffffff;--card2:#f8fafc;--line:#d8e0ea;
+    --txt:#1a2332;--mut:#5b6b82;--cyan:#1b8a3e;--cyan-d:#157334;--gold:#b07604;--green:#1a9f5e}
+  html.light #btn-theme{color:#5b6b82;border-color:#c6d1de}
+  #btn-theme{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;
+    width:38px;height:38px;font-size:1rem;cursor:pointer;font-family:inherit;flex:none;margin-left:auto}
+  html.light .foot,html.light .sub{color:#5b6b82}
+  html.light .app{background:linear-gradient(180deg,#ffffff,#f8fafc)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,rgba(47,166,74,.10),transparent 60%),
+      radial-gradient(900px 500px at -10% 110%,rgba(255,194,75,.06),transparent 55%),var(--bg);
+    color:var(--txt);min-height:100%;padding:34px 16px 60px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .orb{width:46px;height:46px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 35% 30%,#bff4ff,var(--cyan) 45%,var(--cyan-d) 75%,#06222e);
+    box-shadow:0 0 18px rgba(47,166,74,.6),inset 0 0 12px rgba(255,255,255,.4);animation:pulse 3.5s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(47,166,74,.45),inset 0 0 12px rgba(255,255,255,.35)}50%{box-shadow:0 0 26px rgba(47,166,74,.85),inset 0 0 14px rgba(255,255,255,.55)}}
+  h1{font-size:1.6rem;font-weight:800;letter-spacing:.3px}
+  h1 span{color:var(--cyan)}
+  .sub{color:var(--mut);font-size:.9rem;margin:4px 0 26px}
+  .cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  @media(max-width:560px){.cards{grid-template-columns:1fr}}
+  .app{display:block;text-decoration:none;color:inherit;position:relative;
+    background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);
+    border-radius:18px;padding:24px 22px;transition:.16s;border-left:4px solid var(--cyan)}
+  .app:hover{border-color:#2c3e5e;transform:translateY(-2px)}
+  .app.notas{border-left-color:var(--green)}
+  .app .ico{font-size:2.1rem}
+  .app .nm{font-size:1.28rem;font-weight:800;margin:12px 0 6px}
+  .app .ds{color:var(--mut);font-size:.9rem;line-height:1.55}
+  .app .go{margin-top:16px;color:var(--cyan);font-weight:700;font-size:.9rem}
+  .app.notas .go{color:var(--green)}
+  .foot{margin-top:30px;color:var(--mut);font-size:.82rem;line-height:1.7;
+    border-top:1px solid var(--line);padding-top:16px}
+  .foot b{color:var(--txt)}
+</style>
+<script>window.LAB=true;window.MURAL_COLL="murals-lab2";window.CLOUD_PANEL={home:true};</script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="app/theme.js"></script>
+<script src="app/firebase-config.js"></script>
+<script src="app/cloud.js"></script>
+<script>(function(){var t=null;try{t=localStorage.getItem("educa-theme")}catch(e){};if(t==="light")document.documentElement.classList.add("light");else if(t==="dark")document.documentElement.classList.remove("light");else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)document.documentElement.classList.add("light");})();</script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg viewBox="0 0 64 64" style="width:48px;height:48px;flex:none" aria-hidden="true">
+      <rect x="6" y="31" width="10" height="21" rx="3.5" fill="#8fd99b"/>
+      <rect x="19" y="23" width="10" height="29" rx="3.5" fill="#54c163"/>
+      <rect x="32" y="15" width="10" height="37" rx="3.5" fill="#2fa64a"/>
+      <path d="M8 37 L25 50 L60 9" fill="none" stroke="#0f7a30" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <h1>estuda<span style="color:#2fa64a">+</span></h1>
+      <div style="color:var(--mut);font-size:.68rem;letter-spacing:.6px;margin-top:1px">progresso · desempenho · evolução</div>
+    </div>
+    <button id="btn-theme" onclick="EducaTheme.toggle()" title="Alternar tema claro/escuro">🌙</button>
+  </header>
+  <div class="sub">Suas notas e seus estudos do ensino médio — salvos na sua conta, em qualquer aparelho.</div>
+
+  <div class="cards">
+    <a class="app notas" href="notas.html">
+      <div class="ico">📊</div>
+      <div class="nm">Painel de Notas</div>
+      <div class="ds">Lance as notas de cada matéria, veja médias, quanto falta pros 24 pts e o que priorizar.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="app" href="estudos.html">
+      <div class="ico">📝</div>
+      <div class="nm">Painel de Estudos</div>
+      <div class="ds">Provas e produções por data, checklist de conteúdos, planejador e Pomodoro.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="app" href="vestibular.html" style="border-left-color:var(--gold)">
+      <div class="ico">🎓</div>
+      <div class="nm">Vestibular</div>
+      <div class="ds">Evolução, provas dos últimos anos e corretor de gabarito do ENEM que aponta suas áreas fracas.</div>
+      <div class="go" style="color:var(--gold)">Abrir →</div>
+    </a>
+  </div>
+
+  <div id="installArea" style="margin-top:22px;display:none">
+    <button id="btnInstall" style="display:none;align-items:center;gap:10px;background:linear-gradient(180deg,var(--cyan),var(--cyan-d));color:#04121a;border:none;border-radius:12px;padding:13px 20px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 18px rgba(47,166,74,.25)">📲 Instalar como app</button>
+    <button id="btnInstallIOS" style="display:none;align-items:center;gap:10px;background:linear-gradient(180deg,var(--cyan),var(--cyan-d));color:#04121a;border:none;border-radius:12px;padding:13px 20px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 6px 18px rgba(47,166,74,.25)">📲 Instalar no iPhone</button>
+    <div id="iosHint" style="display:none;background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-left:4px solid var(--cyan);border-radius:12px;padding:14px 16px;color:var(--mut);font-size:.9rem;line-height:1.6"></div>
+  </div>
+
+  <!-- Guia de instalação do iOS. A Apple não expõe nenhuma API de instalação
+       (não existe beforeinstallprompt no iOS), então o botão não instala sozinho:
+       ele abre este passo a passo mostrando exatamente onde tocar no Safari. -->
+  <div id="iosGuide" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,8,14,.8);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;padding:0">
+    <div style="background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:20px 20px 0 0;padding:22px 20px 30px;width:100%;max-width:520px;max-height:88vh;overflow:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">
+        <h3 style="font-size:1.15rem;font-weight:800;color:var(--txt)">📲 Instalar o Estuda+ no iPhone</h3>
+        <button id="iosGuideClose" style="background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:9px;width:32px;height:32px;font-size:1rem;cursor:pointer;font-family:inherit;flex:none">✕</button>
+      </div>
+      <p style="color:var(--mut);font-size:.86rem;line-height:1.5;margin-bottom:16px">No iPhone só o <b style="color:var(--txt)">Safari</b> instala — são 3 toques:</p>
+      <div id="iosGuideSteps"></div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-top:14px;color:var(--mut);font-size:.84rem;line-height:1.55">
+        ✅ Depois disso o Estuda+ vira um ícone na sua tela, abre em tela cheia e <b style="color:var(--txt)">o login fica salvo</b> — não precisa entrar toda vez.
+      </div>
+    </div>
+  </div>
+
+  <div id="ep-gestao"></div>
+
+  <div class="foot">
+    <b>É de graça e privado:</b> você entra com o Google e cada um vê só as próprias notas.
+    No <b>Android/Chrome</b> dá pra instalar pelo botão acima; no <b>iPhone</b>, pelo <b>Compartilhar → Adicionar à Tela de Início</b>.
+  </div>
+
+  <script>
+  (function(){
+    var standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone===true;
+    if(standalone) return; // já está instalado
+    var area=document.getElementById("installArea"), btn=document.getElementById("btnInstall"), ios=document.getElementById("iosHint");
+    var deferred=null;
+    window.addEventListener("beforeinstallprompt", function(e){
+      e.preventDefault(); deferred=e;
+      area.style.display="block"; btn.style.display="inline-flex"; ios.style.display="none";
+    });
+    btn.addEventListener("click", function(){
+      if(!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.then(function(){ deferred=null; area.style.display="none"; });
+    });
+    window.addEventListener("appinstalled", function(){ area.style.display="none"; });
+
+    // iPhone/iPad não disparam beforeinstallprompt → precisa de instrução manual.
+    // Cuidado: o iPad moderno se identifica como "Macintosh", então só olhar o
+    // userAgent deixa todo iPad de fora; o toque (maxTouchPoints) desempata.
+    var ua = navigator.userAgent||"";
+    var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1);
+    if(isIOS){
+      // "Adicionar à Tela de Início" só existe no Safari. No Chrome/Firefox/Edge do
+      // iPhone a opção não aparece — mandar o aluno procurar lá só gera frustração.
+      var outroNav = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+      var btnIOS=document.getElementById("btnInstallIOS");
+      var guia=document.getElementById("iosGuide"), passos=document.getElementById("iosGuideSteps");
+      function passo(n,txt){
+        return '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line)">'
+          + '<div style="flex:none;width:26px;height:26px;border-radius:50%;background:var(--cyan);color:#04121a;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.85rem">'+n+'</div>'
+          + '<div style="color:var(--txt);font-size:.93rem;line-height:1.5">'+txt+'</div></div>';
+      }
+      passos.innerHTML = outroNav
+        ? passo(1,'Abra <b>este mesmo endereço no Safari</b> — só ele consegue instalar no iPhone.')
+          + passo(2,'Toque em <b>Compartilhar</b> <span style="display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 6px">↑</span> na barra de baixo.')
+          + passo(3,'Role e toque em <b>“Adicionar à Tela de Início”</b> → <b>Adicionar</b>.')
+        : passo(1,'Toque em <b>Compartilhar</b> <span style="display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 6px">↑</span> — o quadradinho com a setinha, na barra de baixo do Safari.')
+          + passo(2,'Role a lista e toque em <b>“Adicionar à Tela de Início”</b>.')
+          + passo(3,'Confirme em <b>Adicionar</b>, no canto superior direito.');
+      btnIOS.textContent = outroNav ? "📲 Como instalar no iPhone" : "📲 Instalar no iPhone";
+      btnIOS.style.display="inline-flex";
+      area.style.display="block";
+      btnIOS.addEventListener("click",function(){ guia.style.display="flex"; });
+      document.getElementById("iosGuideClose").addEventListener("click",function(){ guia.style.display="none"; });
+      guia.addEventListener("click",function(e){ if(e.target===guia) guia.style.display="none"; });
+    }
+  })();
+  </script>
+</div>
+</body>
+</html>

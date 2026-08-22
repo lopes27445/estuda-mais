@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Notas · 3ª EM · 2026</title>
+<style>
+  :root{
+    --bg:#0a0e16; --bg2:#0e1422; --card:#121a2b; --card2:#0f1626; --line:#1e2a40;
+    --txt:#e8eef7; --mut:#8295b3; --cyan:#2fa64a; --cyan-d:#17833a;
+    --gold:#ffc24b; --green:#43e08a; --red:#ff5b6e; --orange:#ff9f43; --purple:#a78bfa; --blue:#3ad6ff;
+    --surface:#0c1322; --surface2:#101a2c; --chip:#16223a;
+  }
+  html.light{--bg:#f2f5f9;--bg2:#ffffff;--card:#ffffff;--card2:#f8fafc;--line:#d8e0ea;
+    --txt:#1a2332;--mut:#5b6b82;--cyan:#1b8a3e;--cyan-d:#157334;
+    --gold:#b07604;--green:#1a9f5e;--red:#d93a4c;--orange:#c77a1d;--purple:#7c5fd4;--blue:#1d88b8;
+    --surface:#eef3f8;--surface2:#e7ecf3;--chip:#e3e9f1}
+  html.light input,html.light select{background:#ffffff}
+  html.light .hintbox{background:var(--surface);color:var(--txt)}
+  html.light .rk.r3{color:var(--mut)}
+  html.light .wrap>a[href="index.html"]{color:#5b6b82;background:#eef3f8;border-color:#d8e0ea}
+  #btn-theme{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;
+    width:38px;height:38px;font-size:1rem;cursor:pointer;font-family:inherit;flex:none}
+  #btn-risco{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;
+    width:38px;height:38px;font-size:1rem;cursor:pointer;font-family:inherit;flex:none;margin-left:auto}
+  #btn-risco.on{color:var(--green);border-color:var(--green)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(47,166,74,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(255,194,75,.06), transparent 55%),
+      var(--bg);
+    color:var(--txt); min-height:100%; padding:22px 16px 80px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1140px;margin:0 auto}
+  .muted{color:var(--mut)}
+  .hide{display:none!important}
+  a{color:var(--cyan)}
+
+  /* Header */
+  header{margin-bottom:14px}
+  .title{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .orb{width:42px;height:42px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 35% 30%, #bff4ff, var(--cyan) 45%, var(--cyan-d) 75%, #06222e);
+    box-shadow:0 0 18px rgba(47,166,74,.6),inset 0 0 12px rgba(255,255,255,.4);animation:pulse 3.5s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(47,166,74,.45),inset 0 0 12px rgba(255,255,255,.35)}50%{box-shadow:0 0 26px rgba(47,166,74,.85),inset 0 0 14px rgba(255,255,255,.55)}}
+  h1{font-size:1.5rem;font-weight:700;letter-spacing:.3px}
+  h1 span{color:var(--cyan)}
+  .sub{color:var(--mut);font-size:.9rem;margin-top:2px}
+
+  /* Stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0 10px}
+  @media(max-width:680px){.stats{grid-template-columns:1fr 1fr}}
+  .stat{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .stat .n{font-size:1.5rem;font-weight:800;line-height:1.1}
+  .stat .l{color:var(--mut);font-size:.74rem;margin-top:6px;text-transform:uppercase;letter-spacing:.5px}
+  .stat .n small{font-size:.85rem;font-weight:700;color:var(--mut)}
+  .stat select{margin-top:2px;background:var(--surface);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:5px 8px;font-size:1rem;font-weight:800;font-family:inherit}
+  .pill-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .mini{font-size:.78rem;font-weight:800;padding:2px 8px;border-radius:20px}
+  .mini.g{background:rgba(67,224,138,.15);color:var(--green)} .mini.o{background:rgba(255,159,67,.15);color:var(--orange)} .mini.r{background:rgba(255,91,110,.15);color:var(--red)}
+
+  /* Tabs */
+  .tabs{display:flex;gap:8px;margin:18px 0 6px;flex-wrap:wrap}
+  .tab{background:var(--card);border:1px solid var(--line);color:var(--mut);padding:10px 16px;border-radius:11px;cursor:pointer;font-size:.92rem;font-weight:600;transition:.15s;display:flex;align-items:center;gap:8px}
+  .tab:hover{color:var(--txt);border-color:#2c3e5e}
+  .tab.active{color:#04121a;background:linear-gradient(180deg,var(--cyan),var(--cyan-d));border-color:transparent;box-shadow:0 4px 16px rgba(47,166,74,.25)}
+
+  .view{display:none} .view.active{display:block}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin:16px 2px 10px;gap:10px;flex-wrap:wrap}
+  .toolbar h2{font-size:1.05rem;color:var(--mut);font-weight:600}
+
+  /* Buttons */
+  .btn{border:none;border-radius:10px;padding:9px 14px;font-size:.86rem;font-weight:700;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+  .btn.small{padding:7px 11px;font-size:.8rem}
+  .btn.cyan{background:linear-gradient(180deg,var(--cyan),var(--cyan-d));color:#04121a}
+  .btn.gold{background:linear-gradient(180deg,var(--gold),#c98e15);color:#1c1403}
+  .btn.green{background:linear-gradient(180deg,var(--green),#27a866);color:#04140b}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
+  .btn.ghost:hover{color:var(--txt);border-color:#2c3e5e}
+  .btn.danger{background:transparent;border:1px solid var(--red);color:var(--red)}
+  .btn.purple{background:linear-gradient(180deg,#7c5fd4,#6a4fc0);color:#fff}
+  .btn:hover{filter:brightness(1.08)}
+
+  /* Subject cards */
+  .grid{display:grid;gap:12px;grid-template-columns:1fr}
+  @media(min-width:780px){.grid{grid-template-columns:1fr 1fr}}
+  .card{position:relative;background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:14px;padding:15px 16px 14px;border-left:4px solid var(--cyan);transition:.18s}
+  .card.u-red{border-left-color:var(--red)} .card.u-orange{border-left-color:var(--orange)}
+  .card.u-gold{border-left-color:var(--gold)} .card.u-green{border-left-color:var(--green)}
+  .crow{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .disc{font-size:1.14rem;font-weight:700}
+  .tag{display:inline-block;font-size:.7rem;padding:2px 9px;border-radius:20px;background:var(--chip);border:1px solid var(--line);margin-top:5px;font-weight:700}
+  .tag.nat{color:var(--green)} .tag.lin{color:var(--gold)} .tag.hum{color:var(--blue)} .tag.exa{color:var(--purple)}
+  .stpill{font-size:.74rem;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .stpill.green{background:rgba(67,224,138,.15);color:var(--green)} .stpill.gold{background:rgba(255,194,75,.15);color:var(--gold)}
+  .stpill.orange{background:rgba(255,159,67,.15);color:var(--orange)} .stpill.red{background:rgba(255,91,110,.15);color:var(--red)}
+
+  .bims{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:13px 0 4px}
+  .bim{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 4px;text-align:center;cursor:pointer;transition:.15s}
+  .bim:hover{border-color:var(--cyan)}
+  .bim.sel{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan) inset}
+  .bim .bl{font-size:.66rem;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+  .bim .bv{font-size:1.18rem;font-weight:800;margin-top:2px}
+  .bim.empty .bv{color:#3a4a64}
+  .bim.parc .bv{color:var(--orange)}
+
+  .accbar{height:9px;border-radius:6px;background:var(--surface);border:1px solid var(--line);overflow:hidden;margin:11px 0 6px}
+  .accbar>i{display:block;height:100%;border-radius:6px;transition:width .4s}
+  .accbar>i.green{background:linear-gradient(90deg,var(--cyan),var(--green))}
+  .accbar>i.gold{background:linear-gradient(90deg,var(--gold),var(--orange))}
+  .accbar>i.red{background:linear-gradient(90deg,var(--orange),var(--red))}
+  .calcline{font-size:.86rem;color:var(--txt);line-height:1.55}
+  .calcline b{color:var(--txt)}
+
+  /* Editor */
+  .editor{display:none;margin-top:11px;border-top:1px solid var(--line);padding-top:11px}
+  .editor.open{display:block}
+  .editor .ehead{font-size:.82rem;color:var(--gold);font-weight:700;margin-bottom:8px}
+  .fields{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field label{font-size:.68rem;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+  .field input{background:var(--surface);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 7px;font-size:.95rem;font-family:inherit;text-align:center;width:100%}
+  .field input:focus{outline:none;border-color:var(--cyan)}
+  .field .lim{font-size:.6rem;color:#54637e}
+  .emed{margin-top:9px;font-size:.9rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .emed .v{font-weight:800;font-size:1.1rem;color:var(--cyan)}
+
+  /* Calculadora & Sacrifício */
+  .panelbox{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:14px;padding:18px}
+  .panelbox + .panelbox{margin-top:14px}
+  .calcgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  @media(max-width:560px){.calcgrid{grid-template-columns:1fr 1fr}}
+  .bigout{font-size:2.6rem;font-weight:800;line-height:1;color:var(--cyan)}
+  .bigout small{font-size:1rem;color:var(--mut);font-weight:600}
+  .hintbox{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:11px 13px;font-size:.85rem;color:var(--txt);line-height:1.6;margin-top:12px}
+  .hintbox b{color:var(--gold)}
+  select.sel,input.sel{background:var(--surface);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:9px 10px;font-size:.9rem;font-family:inherit}
+  select.sel:focus,input.sel:focus{outline:none;border-color:var(--cyan)}
+
+  .conflict{display:flex;gap:9px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:9px}
+  .conflict .num{width:24px;height:24px;border-radius:50%;background:var(--chip);color:var(--cyan);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex:none}
+  .conflict label{font-size:.7rem;color:var(--mut);display:block;margin-bottom:2px}
+  .conflict .fg{display:flex;flex-direction:column}
+  .conflict input.note{width:78px}
+
+  .verdict{border-radius:14px;padding:16px 18px;margin:14px 0 4px;border:1px solid var(--line)}
+  .verdict.go{background:linear-gradient(180deg,#13233a,#0f1a2c);border-left:4px solid var(--green)}
+  .verdict h3{font-size:1.05rem;margin-bottom:6px}
+  .verdict .big{font-size:1.15rem;font-weight:800;line-height:1.5}
+  .verdict .pri{color:var(--green)} .verdict .sac{color:var(--orange)}
+  .rankrow{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line)}
+  .rankrow .rk{width:26px;height:26px;border-radius:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;font-size:.85rem}
+  .rk.r1{background:var(--red);color:#fff} .rk.r2{background:var(--orange);color:#3a1d00} .rk.r3{background:var(--chip);color:var(--mut)}
+  .rankrow .body{flex:1}
+  .rankrow .nm{font-weight:800;font-size:1rem}
+  .rankrow .why{font-size:.84rem;color:var(--mut);margin-top:3px;line-height:1.5}
+  .scorebar{height:7px;border-radius:5px;background:var(--surface);border:1px solid var(--line);overflow:hidden;margin-top:7px;max-width:280px}
+  .scorebar>i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--red))}
+
+  .foot{margin-top:26px;color:var(--mut);font-size:.8rem;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+  table.legend{font-size:.82rem;border-collapse:collapse;margin-top:6px}
+  table.legend td{padding:2px 10px 2px 0}
+</style>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0e16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Estuda+">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<script>window.LAB=true;window.MURAL_COLL="murals-lab2";window.CLOUD_PANEL={panel:"notas-lab2",keyPrefix:"painel-notas",appScript:"app/notas.app.js"};</script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="app/theme.js"></script>
+<script src="app/vendor/jspdf.umd.min.js"></script>
+<script src="app/firebase-config.js"></script>
+<script src="app/cloud.js"></script>
+<script>(function(){var t=null;try{t=localStorage.getItem("educa-theme")}catch(e){};if(t==="light")document.documentElement.classList.add("light");else if(t==="dark")document.documentElement.classList.remove("light");else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)document.documentElement.classList.add("light");})();</script>
+</head>
+<body>
+<div class="wrap">
+  <a href="index.html" style="display:inline-flex;align-items:center;gap:6px;color:#8295b3;text-decoration:none;font-size:.86rem;font-weight:700;border:1px solid #1e2a40;background:#121a2b;padding:7px 13px;border-radius:10px;margin-bottom:14px">‹ Menu</a>
+  <header>
+    <div class="title">
+      <svg viewBox="0 0 64 64" style="width:40px;height:40px;flex:none" aria-hidden="true"><rect x="6" y="31" width="10" height="21" rx="3.5" fill="#8fd99b"/><rect x="19" y="23" width="10" height="29" rx="3.5" fill="#54c163"/><rect x="32" y="15" width="10" height="37" rx="3.5" fill="#2fa64a"/><path d="M8 37 L25 50 L60 9" fill="none" stroke="#0f7a30" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div>
+        <h1>Painel de <span>Notas</span></h1>
+        <div class="sub">3ª série EM · 2026 · meta de <b>24 pts</b> no ano por matéria (média 6,0)</div>
+      </div>
+      <button id="btn-risco" onclick="compartilharRisco()" title="Compartilhar resumo de risco com professores (opt-in)">📤</button>
+      <button id="btn-theme" onclick="EducaTheme.toggle()" title="Alternar tema claro/escuro">☀️</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="n" id="stMat">—</div><div class="l">Matérias</div></div>
+      <div class="stat">
+        <div class="l" style="margin-top:0">Situação geral</div>
+        <div class="pill-row" id="stSit"></div>
+      </div>
+      <div class="stat"><div class="n" id="stMedia">—<small> /10 média geral</small></div><div class="l">Sua média atual</div></div>
+      <div class="stat">
+        <div class="l" style="margin-top:0">Bimestre atual</div>
+        <select id="bimAtual" onchange="setBimAtual(this.value)">
+          <option value="1">1º bim</option><option value="2">2º bim</option>
+          <option value="3">3º bim</option><option value="4">4º bim</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-v="painel" onclick="tab('painel')">📊 Painel por matéria</div>
+    <div class="tab" data-v="evolucao" onclick="tab('evolucao')">📈 Evolução</div>
+    <div class="tab" data-v="calc" onclick="tab('calc')">🧮 Calculadora de média</div>
+    <div class="tab" data-v="backup" onclick="tab('backup')">💾 Backup</div>
+  </div>
+
+  <!-- PAINEL -->
+  <section class="view active" id="view-painel">
+    <div class="toolbar">
+      <h2>Clique num bimestre (B1–B4) pra lançar/editar as notas</h2>
+      <button class="btn ghost small" onclick="resetSeed()">↺ Limpar tudo</button>
+    </div>
+    <div class="grid" id="cards"></div>
+  </section>
+
+  <!-- EVOLUÇÃO -->
+  <section class="view" id="view-evolucao">
+    <div id="evoContent"></div>
+  </section>
+
+  <!-- CALCULADORA -->
+  <section class="view" id="view-calc">
+    <div class="panelbox">
+      <h2 style="font-size:1.05rem;margin-bottom:4px">🧮 Simule uma média</h2>
+      <p class="muted" style="font-size:.86rem;margin-bottom:10px">Média = (AV1 + AV2 + PC + AVE) ÷ 3. Deixe em branco o que ainda não saiu, ou escreva <b>DISP</b> numa prova dispensada (ela copia a outra).</p>
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:.86rem;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="cSemAv2" onchange="calc()" style="width:auto"> Matéria <b>sem AV2</b> (ex.: Língua Inglesa) — média = (AV1 + PC + AVE) ÷ 2
+      </label>
+      <div class="calcgrid">
+        <div class="field"><label>AV1 — Prova 1</label><input id="cAv1" class="sel" inputmode="decimal" oninput="calc()" placeholder="0–10"><span class="lim">máx 10</span></div>
+        <div class="field" id="cAv2Field"><label>AV2 — Prova 2</label><input id="cAv2" class="sel" inputmode="decimal" oninput="calc()" placeholder="0–10 / DISP"><span class="lim">máx 10</span></div>
+        <div class="field"><label>PC — Produção</label><input id="cPc" class="sel" inputmode="decimal" oninput="calc()" placeholder="0–6"><span class="lim">máx 6</span></div>
+        <div class="field"><label>AVE — Aval. externa</label><input id="cAve" class="sel" inputmode="decimal" oninput="calc()" placeholder="0–4"><span class="lim">máx 4</span></div>
+      </div>
+      <div style="margin-top:18px;display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap">
+        <div><div class="muted" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.5px">Média do bimestre</div><div class="bigout" id="cOut">—</div></div>
+        <div id="cExtra" class="muted" style="font-size:.86rem;line-height:1.6"></div>
+      </div>
+    </div>
+
+    <div class="panelbox">
+      <h2 style="font-size:1.05rem;margin-bottom:4px">🎯 Quanto preciso tirar?</h2>
+      <p class="muted" style="font-size:.86rem;margin-bottom:14px">Preencha o que já tem acima e diga a média que você quer — eu calculo quanto falta no campo que estiver vazio.</p>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="max-width:160px"><label>Média desejada</label><input id="cGoal" class="sel" inputmode="decimal" oninput="calc()" placeholder="ex.: 6,0"></div>
+        <div id="cGoalOut" class="hintbox" style="flex:1;min-width:240px;margin-top:0">Digite uma média desejada.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BACKUP -->
+  <section class="view" id="view-backup">
+    <div class="panelbox">
+      <h2 style="font-size:1.05rem;margin-bottom:8px">💾 Backup dos seus dados</h2>
+      <p class="muted" style="font-size:.86rem;line-height:1.7;margin-bottom:14px">
+        Tudo o que você digita é salvo automaticamente <b>na sua conta Google</b>, na nuvem — abre igual em qualquer aparelho onde você entrar. O backup <b>.json</b> abaixo é opcional (útil pra guardar uma cópia ou migrar notas de outro lugar).
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn green" onclick="exportar()">⬇️ Baixar backup (.json)</button>
+        <label class="btn cyan" style="cursor:pointer">⬆️ Importar backup
+          <input type="file" accept="application/json" style="display:none" onchange="importar(event)">
+        </label>
+        <button class="btn purple" onclick="relatorioPDF()">📄 Relatório do mês (PDF)</button>
+        <button class="btn danger" onclick="resetSeed()">↺ Limpar tudo e recomeçar</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <b>Como leio sua situação:</b> a meta do ano é somar <b>24 pontos</b> nas médias dos 4 bimestres (= média 6,0). Pra cada matéria eu mostro o que você já acumulou e quanto precisa tirar por bimestre no que falta.<br>
+    <b>Áreas e dificuldade</b> (você pode trocar a área de cada matéria no card):
+    <table class="legend">
+      <tr><td><span class="tag nat">Natureza</span></td><td class="muted">Bio · Física · Química — mais difícil pra você → proteja</td></tr>
+      <tr><td><span class="tag lin">Linguagens</span></td><td class="muted">Português · Inglês — mais difícil pra você → proteja</td></tr>
+      <tr><td><span class="tag exa">Exatas</span></td><td class="muted">Matemática — dificuldade média</td></tr>
+      <tr><td><span class="tag hum">Humanas</span></td><td class="muted">Geo · Hist · Socio · Filo — seu ponto forte → mais fácil de recuperar</td></tr>
+    </table>
+  </div>
+</div>
+
+
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Cada usuário só pode ler/escrever os próprios dados (users/{seu-uid}/...).
+    // Ninguém consegue ver as notas de outra pessoa.
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Mural de materiais por prova/PC. Um mural por ambiente:
+    //   "murals"      → beta (painel-e5373.web.app)
+    //   "murals-lab"  → laboratório antigo (congelado, virou o beta)
+    //   "murals-lab2" → laboratório atual (painel-e5373-lab2.web.app)
+    // qualquer aluno logado LÊ; cada um só cria post com o próprio uid e só apaga os próprios.
+    function ehMural(col) {
+      return col == 'murals' || col == 'murals-lab' || col == 'murals-lab2';
+    }
+    match /{col}/{itemId}/posts/{postId} {
+      allow read: if request.auth != null && ehMural(col);
+      allow create: if request.auth != null && ehMural(col)
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && ehMural(col)
+                    && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // true se o usuário logado é staff (professor/coordenação) desta escola —
+    // ou o e-mail master, que tem acesso mesmo sem estar cadastrado no staff.
+    function ehStaff(school) {
+      return request.auth.token.email == 'luizanthonylopes@gmail.com'
+        || exists(/databases/$(database)/documents/schools/$(school)/staff/$(request.auth.token.email));
+    }
+
+    // Staff da escola: leitura pra qualquer logado (o app usa isso pra descobrir
+    // o próprio papel no login); escrita (cadastrar/remover) só quem já é staff.
+    match /schools/{school}/staff/{email} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && ehStaff(school);
+    }
+
+    // Calendário por série (provas, produções concretas e regras): leitura pra
+    // qualquer aluno logado da escola; escrita (publicar) só staff.
+    match /schools/{school}/series/{serie}/provas/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && ehStaff(school);
+    }
+    match /schools/{school}/series/{serie}/pc/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && ehStaff(school);
+    }
+    match /schools/{school}/series/{serie}/meta/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && ehStaff(school);
+    }
+
+    // Risco (opt-in do aluno, painel de Notas): o aluno só escreve o PRÓPRIO
+    // resumo; só staff lê — é dado sensível, por isso tem regra própria em vez
+    // de cair no wildcard de leitura geral do calendário acima.
+    match /schools/{school}/series/{serie}/risco/{uid} {
+      allow read: if request.auth != null && ehStaff(school);
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
