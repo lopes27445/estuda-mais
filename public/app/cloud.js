@@ -419,9 +419,13 @@
         role: role, schoolId: SCHOOL, serie: data.serie || null, turma: data.turma || null,
         vestibulares: data.vestibulares || []
       };
-      // mantém role/nome sincronizados (staff pode ter mudado desde o último login)
-      if (!snap || !snap.exists || data.role !== role) {
-        db.collection("users").doc(user.uid).set({ email: profile.email, nome: profile.nome, role: role, schoolId: SCHOOL }, { merge: true }).catch(function () {});
+      // Grava só identificação. `role` e `schoolId` NÃO vão mais para cá:
+      // quem manda no papel é computeRole(), que lê o documento de staff, e as
+      // regras do Firestore rejeitam qualquer escrita que mexa nesses campos
+      // (V-11 da auditoria — antes o próprio aluno podia se declarar
+      // coordenação no próprio perfil).
+      if (!snap || !snap.exists || data.nome !== profile.nome || data.email !== profile.email) {
+        db.collection("users").doc(user.uid).set({ email: profile.email, nome: profile.nome }, { merge: true }).catch(function () {});
       }
       window._epRole = role;
       return profile.serie ? profile : null;
@@ -506,7 +510,10 @@
     if (!turma) { err.textContent = "Escolha sua turma."; return; }
     var role = window._epRole || "aluno";
     var vestibulares = obVestSel.slice(0, 3);
-    var doc = { email: user.email, nome: (user.displayName || user.email || "Aluno"), role: role, schoolId: SCHOOL, serie: serie, turma: turma, vestibulares: vestibulares };
+    // Sem `role` e sem `schoolId`: são campos de autoridade e o cliente não
+    // grava mais nenhum dos dois (V-11). O papel continua vindo de
+    // computeRole() e a escola é a constante SCHOOL, usada só em memória.
+    var doc = { email: user.email, nome: (user.displayName || user.email || "Aluno"), serie: serie, turma: turma, vestibulares: vestibulares };
     db.collection("users").doc(user.uid).set(doc, { merge: true }).then(function () {
       var o = document.getElementById("cloud-onboard"); if (o) o.remove();
       afterProfile({ uid: user.uid, email: doc.email, nome: doc.nome, role: role, schoolId: SCHOOL, serie: serie, turma: turma, vestibulares: vestibulares });
