@@ -458,7 +458,11 @@
   function getAdminSerie() { try { return realLS.getItem("adminSerie") || null; } catch (e) { return null; } }
 
   function roleLabel(r) { return r === "coordenacao" ? "Coordenação" : (r === "professor" ? "Professor(a)" : "Aluno(a)"); }
-  function esc(s) { return (s == null ? "" : "" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function esc(s) { return (s == null ? "" : "" + s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+    // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function updateChipRole(profile) {
     var el = document.getElementById("cloud-role"); if (!el) return;
     el.textContent = profile.role === "coordenacao" ? "coord" : (profile.role === "professor" ? "prof" : (profile.serie ? profile.serie + "ª" + (profile.turma && profile.turma !== "—" ? " " + profile.turma : "") : "aluno"));

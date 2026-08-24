@@ -59,9 +59,18 @@
 <script src="app/firebase-config.js"></script>
 <script src="app/cloud.js"></script>
 <script src="app/calparse.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- PDF.js e mammoth auto-hospedados (antes vinham do cdnjs, sem SRI).
+     PDF.js subiu de 3.11.174 para 4.10.38: a 3.x tem o CVE-2024-4367, em que um
+     PDF preparado executa JavaScript no domínio de quem abre. Como o painel de
+     admin é usado por professor e coordenação, era a conta mais valiosa do
+     sistema abrindo arquivo de origem externa. A 4.x é distribuída só como
+     módulo ES, por isso o import abaixo em vez de <script src>. -->
+<script src="app/vendor/mammoth.browser.min.js"></script>
+<script type="module">
+  import * as pdfjsLib from "./app/vendor/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "./app/vendor/pdf.worker.min.mjs";
+  window.pdfjsLib = pdfjsLib;
+</script>
 <script>(function(){var t=null;try{t=localStorage.getItem("educa-theme")}catch(e){};if(t==="light")document.documentElement.classList.add("light");else if(t==="dark")document.documentElement.classList.remove("light");else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)document.documentElement.classList.add("light");})();</script>
 </head>
 <body>

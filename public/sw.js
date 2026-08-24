@@ -3,7 +3,7 @@
      quando tem internet; cai pro cache se estiver offline).
    - Ícones/manifest e o SDK do Firebase (gstatic): cache-first (são estáveis).
    - NÃO intercepta chamadas do Firestore/Auth (googleapis) — o SDK cuida do offline. */
-const CACHE = "painel-lab-v13";
+const CACHE = "painel-lab-v14";
 const SHELL = [
   "./",
   "./index.html",
@@ -20,6 +20,9 @@ const SHELL = [
   "./app/calparse.js",
   "./app/theme.js",
   "./app/vendor/jspdf.umd.min.js",
+  "./app/vendor/pdf.min.mjs",
+  "./app/vendor/pdf.worker.min.mjs",
+  "./app/vendor/mammoth.browser.min.js",
   "./app/vestibular.app.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -64,8 +67,12 @@ self.addEventListener("fetch", (e) => {
   const isSDK = url.hostname === "www.gstatic.com";
   if (!sameOrigin && !isSDK) return;
 
-  // conteúdo que muda (HTML + JS do app) → network-first
-  const isAppCode = sameOrigin && (req.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname.startsWith("/app/"));
+  // conteúdo que muda (HTML + JS do app) → network-first.
+  // /app/vendor/ fica de fora: são bibliotecas de terceiros com versão fixa no
+  // nome do diretório, nunca mudam sem troca de arquivo, e são grandes demais
+  // (o worker do PDF.js sozinho passa de 1 MB) pra revalidar a cada carga.
+  const isVendor = url.pathname.startsWith("/app/vendor/");
+  const isAppCode = sameOrigin && !isVendor && (req.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname.startsWith("/app/"));
   if (isAppCode) {
     e.respondWith(fetch(req).then((res) => putCache(req, res)).catch(() => caches.match(req)));
     return;

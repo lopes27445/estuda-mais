@@ -1,0 +1,61 @@
+# CI de segurança (V-15 da auditoria).
+# Antes disto, as regras do Firestore podiam ser alteradas e publicadas sem que
+# nada verificasse se uma proteção tinha sido perdida — foi exatamente assim que
+# a checagem de coordenação sumiu entre uma versão e outra das regras.
+name: Segurança
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  regras-do-firestore:
+    name: Regras do Firestore (23 cenários no emulador)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      # o emulador do Firestore roda em Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      - run: npm test
+
+  dependencias-e-regressao:
+    name: Dependências e regressões conhecidas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Auditoria de dependências
+        run: npm audit --audit-level=high
+
+      # Guardas contra o retorno de coisas que já foram corrigidas.
+      - name: PDF.js vulnerável não pode voltar
+        run: |
+          if grep -rn "pdf\.js/3\." public/ ; then
+            echo "::error::PDF.js 3.x tem o CVE-2024-4367. Use a versão auto-hospedada em app/vendor/."
+            exit 1
+          fi
+      - name: Biblioteca de terceiros não pode vir de CDN sem SRI
+        run: |
+          if grep -rn "cdnjs.cloudflare.com" --include="*.html" public/ | grep -v "^.*<!--" ; then
+            echo "::error::Script de CDN sem integridade. Auto-hospede em app/vendor/."
+            exit 1
+          fi
+      - name: Cliente não pode gravar campos de autoridade no perfil
+        run: |
+          if grep -rn "role: role, schoolId: SCHOOL }" public/app/cloud.js ; then
+            echo "::error::V-11 de volta: o cliente está gravando role/schoolId em users/{uid}."
+            exit 1
+          fi

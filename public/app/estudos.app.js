@@ -97,18 +97,69 @@ function load(){
   Object.keys(raw||{}).forEach(k=>{ const v=raw[k]; if(v&&typeof v==="object"&&("done"in v||"studied"in v)) items[k]={done:!!v.done,studied:v.studied||[],notes:"",links:[]}; });
   return normalize({v:2, items});
 }
+/* Saneamento da fronteira de importação (V-06 da auditoria).
+   Antes, `normalize` só preenchia campos que faltavam — o JSON do backup era
+   aceito como veio e ia direto pro DOM. Um arquivo preparado conseguia colocar
+   aspas dentro de value="…" e ids arbitrários dentro de onclick="f('…')".
+   Como `normalize` também roda no load(), isto protege igualmente contra
+   localStorage adulterado, não só contra arquivo importado. */
+const LIM_TXT=500, LIM_LISTA=500;
+function _txt(v,lim){ return String(v==null?"":v).slice(0,lim||LIM_TXT); }
+function _num(v,def,min,max){ const n=Number(v); if(!isFinite(n)) return def; return Math.min(max,Math.max(min,n)); }
+function _lista(v){ return Array.isArray(v)?v.slice(0,LIM_LISTA):[]; }
+
+function saneiaItemEstado(o){
+  o=(o&&typeof o==="object")?o:{};
+  return {
+    studied:_lista(o.studied).map(n=>_num(n,0,0,9999)),
+    done:!!o.done,
+    notes:_txt(o.notes,4000),
+    links:_lista(o.links).map(l=>({url:safeUrl(l&&l.url), label:_txt(l&&l.label,120)})).filter(l=>l.url)
+  };
+}
+function saneiaCustom(it){
+  it=(it&&typeof it==="object")?it:{};
+  return { id:safeId(it.id)||("u-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)),
+    tipo:_txt(it.tipo,20), disc:_txt(it.disc,120), data:_txt(it.data,20), prof:_txt(it.prof,120),
+    area:_txt(it.area,40), mod:_txt(it.mod,60), desc:_txt(it.desc,1000), note:_txt(it.note,1000),
+    topics:_lista(it.topics).map(t=>_txt(t,300)) };
+}
 function normalize(s){
-  s.v=2; s.items=s.items||{}; s.custom=s.custom||[]; s.overrides=s.overrides||{};
-  s.hidden=s.hidden||[]; s.study=s.study||{}; s.pomo=s.pomo||{}; if(!s.pomo.focus) s.pomo.focus=25;
-  s.plan=s.plan||{}; if(s.plan.available==null) s.plan.available=120; s.plan.manual=s.plan.manual||[]; s.plan.start=s.plan.start||"";
-  s.vest=s.vest||{}; s.vest.metas=s.vest.metas||[]; s.vest.simulados=s.vest.simulados||[]; s.vest.dias=s.vest.dias||{}; s.vest.provas=s.vest.provas||[]; s.vest.exercicios=s.vest.exercicios||[];
+  s=(s&&typeof s==="object")?s:{};
+  s.v=2;
+  // chaves de s.items viram id de elemento e entram em handler inline
+  const itens={}; Object.keys(s.items||{}).slice(0,LIM_LISTA).forEach(k=>{
+    const id=safeId(k); if(id) itens[id]=saneiaItemEstado(s.items[k]);
+  });
+  s.items=itens;
+  s.custom=_lista(s.custom).map(saneiaCustom);
+  const ovr={}; Object.keys(s.overrides||{}).slice(0,LIM_LISTA).forEach(k=>{
+    const id=safeId(k); if(id) ovr[id]=saneiaCustom(s.overrides[k]);
+  });
+  s.overrides=ovr;
+  s.hidden=_lista(s.hidden).map(safeId).filter(Boolean);
+  const est={}; Object.keys(s.study||{}).slice(0,LIM_LISTA).forEach(k=>{ est[_txt(k,120)]=_num(s.study[k],0,0,1e6); });
+  s.study=est;
+  s.pomo=(s.pomo&&typeof s.pomo==="object")?s.pomo:{}; s.pomo.focus=_num(s.pomo.focus,25,1,180);
+  s.plan=(s.plan&&typeof s.plan==="object")?s.plan:{};
+  s.plan.available=_num(s.plan.available,120,0,1440);
+  s.plan.manual=_lista(s.plan.manual).map(r=>({label:_txt(r&&r.label,120), min:_num(r&&r.min,0,0,1440)}));
+  s.plan.start=_txt(s.plan.start,20);
+  s.vest=(s.vest&&typeof s.vest==="object")?s.vest:{};
+  s.vest.metas=_lista(s.vest.metas); s.vest.simulados=_lista(s.vest.simulados);
+  s.vest.dias=(s.vest.dias&&typeof s.vest.dias==="object")?s.vest.dias:{};
+  s.vest.provas=_lista(s.vest.provas); s.vest.exercicios=_lista(s.vest.exercicios);
   return s;
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 function st(id){ if(!state.items[id]) state.items[id]={done:false,studied:[],notes:"",links:[]}; const o=state.items[id]; o.studied=o.studied||[]; o.links=o.links||[]; if(o.notes==null)o.notes=""; return o; }
 
 /* ============================ HELPERS ============================ */
-function esc(s){ return (s==null?"":""+s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function esc(s) { return (s == null ? "" : "" + s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+  // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function fmtData(iso){ if(!iso) return "--"; const p=iso.split("-"); return p[2]+"/"+p[1]; }
 function hojeMidnight(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
 function diasFalta(iso){ const p=iso.split("-").map(Number); const a=new Date(p[0],p[1]-1,p[2]); a.setHours(0,0,0,0); return Math.round((a-hojeMidnight())/864e5); }
@@ -198,7 +249,14 @@ function cardHTML(item, view){
   </div>`;
 }
 function linksHTML(id){
-  return st(id).links.map((l,i)=>`<span class="chip"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label||l.url)}</a><button onclick="rmLink('${id}',${i})" title="remover">×</button></span>`).join("");
+  const sid=safeId(id);
+  return st(id).links.map((l,i)=>{
+    // Valida no RENDER, não só na entrada. `addLink` já chamava safeUrl, mas um
+    // link restaurado de backup nunca passou por ali e ia direto pro href.
+    const u=safeUrl(l.url);
+    if(!u) return "";
+    return `<span class="chip"><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(l.label||u)}</a><button onclick="rmLink('${sid}',${i})" title="remover">×</button></span>`;
+  }).join("");
 }
 
 /* ============================ RENDER ============================ */
@@ -342,7 +400,24 @@ function toggleTopic(id,idx,ev){ev.stopPropagation(); const s=st(id); const i=s.
 function conclude(id){st(id).done=true;save();render();}
 function reopen(id){st(id).done=false;save();render();}
 function onNote(id,el){st(id).notes=el.value;save();}
-function safeUrl(u){u=(u||"").trim(); if(!u)return""; if(/^javascript:/i.test(u))return""; if(!/^https?:\/\//i.test(u)){ if(/^[\w.-]+\.\w/.test(u)) u="https://"+u; else return ""; } return u;}
+/* Lista de permissão, não lista de proibição (V-07 da auditoria).
+   A versão antiga barrava só /^javascript:/ por regex, o que deixava passar
+   data:, vbscript:, file: e variações escritas com entidade HTML. Aqui a URL é
+   de fato interpretada pelo navegador e só http/https sobrevivem. */
+function safeUrl(u){
+  u=(u||"").trim(); if(!u) return "";
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(u)){          // sem esquema: assume https
+    if(!/^[\w.-]+\.\w/.test(u)) return "";
+    u="https://"+u;
+  }
+  try{ const p=new URL(u); return (p.protocol==="http:"||p.protocol==="https:")?p.href:""; }
+  catch(e){ return ""; }
+}
+/* Ids são interpolados dentro de handlers inline — onclick="f('<id>')". Ali
+   escape de HTML NÃO protege: o navegador decodifica a entidade antes do JS
+   ler, então &#39; vira aspa de novo e fecha a string. A defesa que funciona
+   nesse contexto é restringir o conjunto de caracteres. */
+function safeId(v){ return String(v==null?"":v).replace(/[^A-Za-z0-9_-]/g,""); }
 function addLink(id){const uEl=document.getElementById("lu-"+id),lEl=document.getElementById("ll-"+id); const url=safeUrl(uEl.value); if(!url){uEl.style.borderColor="var(--red)";return;} st(id).links.push({url,label:(lEl.value||"").trim()}); save(); uEl.value="";lEl.value=""; document.getElementById("links-"+id).innerHTML=linksHTML(id);}
 function rmLink(id,i){st(id).links.splice(i,1);save();document.getElementById("links-"+id).innerHTML=linksHTML(id);}
 

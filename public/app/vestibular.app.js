@@ -251,7 +251,11 @@
   var state, marks = {}, pomo = { mode: "focus", remaining: 0, running: false, timer: null };
   function load() { try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; } if (!state || !state.registros) state = { registros: [] }; if (!state.pomo) state.pomo = { focus: 25, brk: 5, cycles: 0, totalMin: 0 }; if (!state.provas) state.provas = []; if (!state.dias) state.dias = {}; if (!state.badges) state.badges = []; if (state.meta == null) state.meta = 0; if (!state.vestTab) state.vestTab = "enem"; if (!state.metas) state.metas = []; if (!state.exercicios) state.exercicios = []; }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
-  function esc(s) { return (s == null ? "" : "" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function esc(s) { return (s == null ? "" : "" + s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+    // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function todayISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function fmtBR(iso) { if (!iso) return ""; var p = iso.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); }
   function pct(n, d) { return d ? Math.round(n / d * 100) : 0; }
