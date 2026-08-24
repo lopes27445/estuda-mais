@@ -356,12 +356,41 @@ function resetSeed(){
    Grava um resumo (sem notas cruas, só situação por matéria) em
    schools/{school}/series/{serie}/risco/{uid} — só o próprio aluno escreve;
    professor/coordenação leem pra acompanhar quem está em risco. */
+/* V-05 da auditoria. O que mudou:
+   - o texto dizia "anônimo" e mandava nome, e-mail e uid. Agora diz a verdade
+     ANTES de enviar, e o e-mail saiu (a equipe já identifica pelo nome+turma,
+     então guardar o e-mail junto não servia a finalidade nenhuma).
+   - grava QUAL consentimento e QUANDO. Sem isso não há como provar que houve.
+   - dá pra revogar, e a revogação apaga o documento de verdade. */
+const CONSENT_VERSAO = "2026-08-24";
+const CONSENT_TEXTO =
+  "Compartilhar com professores e coordenação:\n\n" +
+  "• seu NOME e sua turma\n" +
+  "• a situação de cada matéria (ok / atenção / risco)\n" +
+  "• o quanto você já somou da meta do ano\n\n" +
+  "NÃO é anônimo — a equipe vê que é você.\n" +
+  "Finalidade: acompanhamento pedagógico, para te oferecerem ajuda.\n" +
+  "Suas notas exatas não são enviadas.\n\n" +
+  "Você pode desfazer quando quiser, no mesmo botão.\n\nConfirma?";
+
 let _riscoPending=false;
+function riscoRef(serie){
+  return Cloud.firestore().collection("schools").doc(Cloud.school())
+    .collection("series").doc(serie).collection("risco").doc(Cloud.user.uid);
+}
 function compartilharRisco(){
   if(!(window.Cloud && Cloud.user && Cloud.firestore())){ alert("Faça login primeiro."); return; }
   if(_riscoPending){ alert("Já tem um envio em andamento, aguarde."); return; }
   const serie=(window.EP && window.EP.serie) || "3";
-  const uid=Cloud.user.uid;
+  let jaCompartilhou=false;
+  try{ jaCompartilhou = localStorage.getItem("educa-risco-ok")==="1"; }catch(e){}
+
+  if(jaCompartilhou){
+    if(confirm("Você já compartilha seu resumo.\n\nOK = atualizar com as notas de agora\nCancelar = parar de compartilhar e apagar o que a escola vê")) {
+      // segue e atualiza
+    } else { revogarRisco(serie); return; }
+  } else if(!confirm(CONSENT_TEXTO)) { return; }
+
   const materias=state.subjects.map(s=>{
     const r=resumo(s), st=statusOf(r);
     return {id:s.id, name:s.name, acc:r.acc, precisa:r.precisa, fechou:r.fechou,
@@ -369,16 +398,25 @@ function compartilharRisco(){
   }).sort((a,b)=> a.status==="risco"?-1:1);
   let accTotal=0; materias.forEach(m=>accTotal+=m.acc);
   const pctMeta=Math.round(Math.min(100, accTotal/(META*state.subjects.length)*100));
-  const doc={ nome:Cloud.user.displayName||Cloud.user.email||"Aluno", email:Cloud.user.email,
-    serie:serie, turma:(window.EP && window.EP.turma)||"—", pctMeta, materias, atualizado:Date.now() };
+  const doc={ nome:Cloud.user.displayName||Cloud.user.email||"Aluno",
+    serie:serie, turma:(window.EP && window.EP.turma)||"—", pctMeta, materias,
+    atualizado:Date.now(), consentVersao:CONSENT_VERSAO, consentEm:Date.now() };
   _riscoPending=true;
-  Cloud.firestore().collection("schools").doc(Cloud.school()).collection("series").doc(serie).collection("risco").doc(uid)
-    .set(doc).then(function(){
+  riscoRef(serie).set(doc).then(function(){
       _riscoPending=false;
       const b=document.getElementById("btn-risco"); if(b) b.classList.add("on");
       try{ localStorage.setItem("educa-risco-ok","1"); }catch(e){}
-      alert("✅ Resumo compartilhado! Professores e coordenação verão suas matérias em destaque no painel de risco.");
+      alert("✅ Resumo compartilhado. Para desfazer, clique no mesmo botão e escolha Cancelar.");
     }).catch(function(e){ _riscoPending=false; alert("Não consegui compartilhar: "+(e&&e.message||"erro de conexão")); });
+}
+function revogarRisco(serie){
+  _riscoPending=true;
+  riscoRef(serie).delete().then(function(){
+    _riscoPending=false;
+    const b=document.getElementById("btn-risco"); if(b) b.classList.remove("on");
+    try{ localStorage.removeItem("educa-risco-ok"); }catch(e){}
+    alert("✅ Compartilhamento desfeito. Seu resumo foi apagado e a escola não vê mais.");
+  }).catch(function(e){ _riscoPending=false; alert("Não consegui desfazer: "+(e&&e.message||"erro")); });
 }
 function riscoUI(){
   const b=document.getElementById("btn-risco"); if(!b) return;

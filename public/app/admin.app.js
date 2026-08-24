@@ -274,23 +274,80 @@
     }, Promise.resolve());
   }
 
+  /* Trilha de auditoria (V-15). Append-only: as regras não deixam nem quem
+     escreveu alterar depois. É registro de operação normal, não prova contra
+     má-fé — quem age poderia simplesmente não gravar. Nunca derruba a ação
+     principal: se a auditoria falhar, o publish continua. */
+  function auditar(acao, alvo, detalhe) {
+    try {
+      return db.collection("schools").doc(SCHOOL).collection("auditoria").doc().set({
+        ator: (Cloud.user && Cloud.user.email) || "?",
+        acao: acao, alvo: alvo, detalhe: String(detalhe || "").slice(0, 300),
+        quando: Date.now()
+      }).catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+
+  /* V-14 — publicação atômica por ponteiro de versão.
+     Antes: apagava tudo e regravava em lotes sequenciais. Uma queda de rede no
+     meio deixava a série com calendário pela metade, ou vazia, para sempre —
+     e sem rollback.
+     Agora: a versão nova é escrita SEM tocar na atual, e a troca é uma única
+     transação num único documento. Se cair no meio da subida, a versão
+     anterior continua ativa e o aluno não vê diferença. */
   function publish() {
     var items = collectDraft();
     if (!items.length) { alert("Nada para publicar."); return; }
     var tipoNome = draftTipo === "pc" ? "Produção Concreta" : "Provas";
     if (!confirm("Publicar " + items.length + " itens de " + tipoNome + " na " + serie + "ª série?\nIsso SUBSTITUI os itens atuais dessa categoria.")) return;
+
     var coll = base().collection(draftTipo);
-    coll.get().then(function (q) {
-      var ops = [];
-      q.docs.forEach(function (d) { ops.push(function (b) { b.delete(d.ref); }); });
-      items.forEach(function (it) { ops.push(function (b) { b.set(coll.doc(), it); }); });
-      var reg = (document.getElementById("a-regras") || {}).value || "";
-      ops.push(function (b) { b.set(base().collection("meta").doc("regras"), draftTipo === "pc" ? { pc: reg } : { provas: reg }, { merge: true }); });
-      return commitEmLotes(ops);
+    var novaVer = String(Date.now());
+    var reg = (document.getElementById("a-regras") || {}).value || "";
+
+    // 1) sobe a versão nova em paralelo à atual
+    var ops = items.map(function (it) {
+      var d = {}; for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) d[k] = it[k];
+      d.ver = novaVer;
+      return function (b) { b.set(coll.doc(), d); };
+    });
+
+    commitEmLotes(ops).then(function () {
+      // 2) a troca: uma transação, um documento. É aqui que a publicação
+      //    "acontece" do ponto de vista do aluno.
+      var ptr = base().collection("meta").doc("ativo");
+      return db.runTransaction(function (t) {
+        return t.get(ptr).then(function (s) {
+          var d = (s.exists && s.data()) || {};
+          d[draftTipo] = novaVer;
+          t.set(ptr, d, { merge: true });
+        });
+      });
+    }).then(function () {
+      return base().collection("meta").doc("regras")
+        .set(draftTipo === "pc" ? { pc: reg } : { provas: reg }, { merge: true });
+    }).then(function () {
+      auditar("publicar", "series/" + serie + "/" + draftTipo, items.length + " itens · versão " + novaVer);
+      // 3) faxina das versões antigas — best-effort. Se falhar, sobra lixo
+      //    invisível, e nunca calendário quebrado.
+      return limparVersoes(coll, novaVer).catch(function () {});
     }).then(function () {
       alert("✅ Publicado! Os alunos da " + serie + "ª série já veem o novo calendário de " + tipoNome + ".");
       draft = null; render();
-    }).catch(function (e) { alert("Erro ao publicar: " + (e && e.message || e)); });
+    }).catch(function (e) {
+      alert("Erro ao publicar: " + (e && e.message || e) + "\n\nO calendário anterior continua no ar, intacto.");
+    });
+  }
+
+  function limparVersoes(coll, manter) {
+    return coll.get().then(function (q) {
+      var ops = [];
+      q.docs.forEach(function (d) {
+        var v = (d.data() || {}).ver;
+        if (v !== manter) ops.push(function (b) { b.delete(d.ref); });
+      });
+      return ops.length ? commitEmLotes(ops) : null;
+    });
   }
 
   function loadPublished() {

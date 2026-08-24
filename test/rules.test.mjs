@@ -149,8 +149,8 @@ describe("V-03 · não se atravessa para outra escola", () => {
   it("9. aluno NÃO grava resumo de risco em outra escola", async () => {
     await assertFails(
       setDoc(doc(alunoDb, `schools/${OUTRA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", email: "aluno@escola.com", serie: "3", turma: "A",
-        pctMeta: 40, materias: [], atualizado: Date.now()
+        nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [],
+        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
       })
     );
   });
@@ -158,8 +158,8 @@ describe("V-03 · não se atravessa para outra escola", () => {
   it("10. aluno NÃO grava risco numa série diferente da do caminho", async () => {
     await assertFails(
       setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", email: "aluno@escola.com", serie: "1", turma: "A",
-        pctMeta: 40, materias: [], atualizado: Date.now()
+        nome: "Aluno", serie: "1", turma: "A", pctMeta: 40, materias: [],
+        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
       })
     );
   });
@@ -167,8 +167,8 @@ describe("V-03 · não se atravessa para outra escola", () => {
   it("11. aluno CONSEGUE gravar o próprio risco na própria escola/série", async () => {
     await assertSucceeds(
       setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", email: "aluno@escola.com", serie: "3", turma: "A",
-        pctMeta: 40, materias: [], atualizado: Date.now()
+        nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [],
+        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
       })
     );
   });
@@ -176,8 +176,8 @@ describe("V-03 · não se atravessa para outra escola", () => {
   it("12. aluno NÃO grava risco no lugar de outro aluno", async () => {
     await assertFails(
       setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-outro`), {
-        nome: "Outro", email: "outro@escola.com", serie: "3", turma: "A",
-        pctMeta: 10, materias: [], atualizado: Date.now()
+        nome: "Outro", serie: "3", turma: "A", pctMeta: 10, materias: [],
+        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
       })
     );
   });
@@ -250,5 +250,71 @@ describe("Lista de staff não é pública", () => {
 
   it("23. coordenação CONSEGUE listar o staff (tela de gestão)", async () => {
     await assertSucceeds(getDocs(collection(coordDb, `schools/${ESCOLA}/staff`)));
+  });
+});
+
+/* ============ V-05 — consentimento e revogação ============ */
+describe("V-05 · consentimento identificado e revogável", () => {
+  it("24. aluno NÃO grava resumo sem registrar o consentimento", async () => {
+    await assertFails(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
+        nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [], atualizado: Date.now()
+      })
+    );
+  });
+
+  it("25. aluno NÃO grava e-mail junto (campo removido por minimização)", async () => {
+    await assertFails(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
+        nome: "Aluno", email: "aluno@escola.com", serie: "3", turma: "A", pctMeta: 40,
+        materias: [], atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
+      })
+    );
+  });
+
+  it("26. aluno CONSEGUE revogar apagando o próprio resumo", async () => {
+    await assertSucceeds(deleteDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+  });
+
+  it("27. professor NÃO apaga o resumo de um aluno", async () => {
+    await assertFails(deleteDoc(doc(profDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+  });
+});
+
+/* ============ V-15 — trilha de auditoria append-only ============ */
+describe("V-15 · auditoria não se apaga", () => {
+  it("28. staff CONSEGUE registrar uma ação", async () => {
+    await assertSucceeds(
+      setDoc(doc(profDb, `schools/${ESCOLA}/auditoria/a1`), {
+        ator: "prof@escola.com", acao: "publicar", alvo: "series/3/provas",
+        detalhe: "12 itens", quando: Date.now()
+      })
+    );
+  });
+
+  it("29. staff NÃO registra ação no nome de outra pessoa", async () => {
+    await assertFails(
+      setDoc(doc(profDb, `schools/${ESCOLA}/auditoria/a2`), {
+        ator: "coord@escola.com", acao: "publicar", alvo: "x", detalhe: "", quando: Date.now()
+      })
+    );
+  });
+
+  it("30. NEM quem escreveu consegue alterar depois", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/auditoria/a3`), {
+        ator: "prof@escola.com", acao: "publicar", alvo: "x", detalhe: "", quando: 1
+      });
+    });
+    await assertFails(
+      setDoc(doc(profDb, `schools/${ESCOLA}/auditoria/a3`), {
+        ator: "prof@escola.com", acao: "outra", alvo: "x", detalhe: "", quando: 2
+      })
+    );
+    await assertFails(deleteDoc(doc(profDb, `schools/${ESCOLA}/auditoria/a3`)));
+  });
+
+  it("31. aluno NÃO lê a trilha de auditoria", async () => {
+    await assertFails(getDoc(doc(alunoDb, `schools/${ESCOLA}/auditoria/a1`)));
   });
 });

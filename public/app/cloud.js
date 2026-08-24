@@ -561,17 +561,28 @@
       Array.prototype.forEach.call(el.querySelectorAll(".ep-rm"), function (b) { b.addEventListener("click", function () { gestaoRemove(b.getAttribute("data-e")); }); });
     }).catch(function () { var el = document.getElementById("ep-stafflist"); if (el) el.textContent = "Não consegui carregar a lista."; });
   }
+  /* Trilha de auditoria (V-15): cadastrar e remover staff sao as acoes de
+     maior poder do sistema. Nunca derruba a acao principal se falhar. */
+  function auditar(acao, alvo, detalhe) {
+    try {
+      return db.collection("schools").doc(SCHOOL).collection("auditoria").doc().set({
+        ator: (user && user.email) || "?", acao: acao, alvo: alvo,
+        detalhe: String(detalhe || "").slice(0, 300), quando: Date.now()
+      }).catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+
   function gestaoAdd() {
     var email = (document.getElementById("ep-email").value || "").trim().toLowerCase();
     var role = document.getElementById("ep-role").value;
     if (!/^[^\s<>"'&]+@[^\s<>"'&]+\.[^\s<>"'&]+$/.test(email)) { alert("E-mail inválido."); return; }
     db.collection("schools").doc(SCHOOL).collection("staff").doc(email).set({ role: role, addedBy: user.email, addedAt: Date.now() })
-      .then(function () { document.getElementById("ep-email").value = ""; gestaoRefresh(); })
+      .then(function () { auditar("staff:adicionar", email, "papel " + role); document.getElementById("ep-email").value = ""; gestaoRefresh(); })
       .catch(function (e) { alert("Não consegui adicionar: " + (e && e.message || "erro")); });
   }
   function gestaoRemove(email) {
     if (!confirm("Remover " + email + " do staff? Ele volta a ser aluno.")) return;
-    db.collection("schools").doc(SCHOOL).collection("staff").doc(email).delete().then(gestaoRefresh).catch(function () { alert("Não consegui remover."); });
+    db.collection("schools").doc(SCHOOL).collection("staff").doc(email).delete().then(function () { auditar("staff:remover", email, ""); gestaoRefresh(); }).catch(function () { alert("Não consegui remover."); });
   }
 
   // expõe pouca coisa (a home usa onReady via CLOUD_PANEL)

@@ -185,10 +185,22 @@ function loadSerieContent(done){
   if(!(window.Cloud && Cloud.firestore && window.EP)){ done(); return; }
   var db=Cloud.firestore(), serie=String(window.EP.serie);
   var base=db.collection("schools").doc(Cloud.school()).collection("series").doc(serie);
-  Promise.all([ base.collection("provas").get(), base.collection("pc").get(), base.collection("meta").doc("regras").get() ])
+  Promise.all([ base.collection("provas").get(), base.collection("pc").get(),
+                base.collection("meta").doc("regras").get(), base.collection("meta").doc("ativo").get() ])
    .then(function(res){
-     var pv=res[0].docs.map(function(d){var o=d.data(); o.id=d.id; return o;});
-     var pc=res[1].docs.map(function(d){var o=d.data(); o.id=d.id; return o;});
+     // V-14: o calendário publicado agora tem versão, e meta/ativo diz qual
+     // está valendo. Enquanto a troca de versão não terminou, o aluno continua
+     // vendo a anterior inteira — nunca um calendário pela metade.
+     var ativo = res[3].exists ? (res[3].data()||{}) : {};
+     function daVersaoAtiva(snap, tipo){
+       var docs = snap.docs.map(function(d){var o=d.data(); o.id=d.id; return o;});
+       var v = ativo[tipo];
+       if(!v) return docs;                                  // antes do ponteiro existir
+       var f = docs.filter(function(o){ return o.ver===v; });
+       return f.length ? f : docs.filter(function(o){ return !o.ver; });
+     }
+     var pv=daVersaoAtiva(res[0],"provas");
+     var pc=daVersaoAtiva(res[1],"pc");
      if(pv.length||pc.length){ window._RPROVAS=pv; window._RPC=pc; }
      window._REGRAS = res[2].exists ? res[2].data() : null;
      done();

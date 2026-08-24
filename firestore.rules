@@ -137,13 +137,38 @@ service cloud.firestore {
     // (V-05); o botão que chama isso ainda não foi construído.
     match /schools/{escola}/series/{serie}/risco/{uid} {
       allow read: if ehStaff(escola);
+      // V-05: `email` saiu da lista — a equipe já identifica o aluno pelo nome
+      // e pela turma, então guardar o e-mail junto não servia a nenhuma
+      // finalidade declarada. Entraram `consentVersao` e `consentEm`: sem
+      // registrar QUAL consentimento e QUANDO, não há como provar que houve.
       allow create, update: if signedIn() && escolaConhecida(escola)
                             && request.auth.uid == uid
                             && request.resource.data.keys().hasOnly(
-                                 ['nome', 'email', 'serie', 'turma', 'pctMeta',
-                                  'materias', 'atualizado'])
-                            && request.resource.data.serie == serie;
+                                 ['nome', 'serie', 'turma', 'pctMeta',
+                                  'materias', 'atualizado',
+                                  'consentVersao', 'consentEm'])
+                            && request.resource.data.serie == serie
+                            && request.resource.data.consentVersao is string;
+      // revogação: o dono apaga o próprio resumo quando quiser
       allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    /* ------------------------------ auditoria ---------------------------- */
+    // V-15: trilha do que a equipe faz com poder — cadastrar staff, publicar
+    // calendário. Append-only de verdade: nem quem escreveu consegue alterar
+    // ou apagar depois.
+    //
+    // Limite honesto: como quem grava é o próprio navegador de quem age, isto
+    // registra a operação normal — não impede alguém de simplesmente não
+    // gravar. Trilha à prova de adulteração exige Admin SDK. Serve para
+    // reconstruir o que aconteceu, não para provar má-fé.
+    match /schools/{escola}/auditoria/{id} {
+      allow read: if ehCoord(escola);
+      allow create: if ehStaff(escola)
+                    && request.resource.data.keys().hasOnly(
+                         ['ator', 'acao', 'alvo', 'detalhe', 'quando'])
+                    && request.resource.data.ator == request.auth.token.email;
+      allow update, delete: if false;
     }
 
     /* ------------------------------ mural -------------------------------- */
