@@ -5,7 +5,11 @@
   "use strict";
   var db, SCHOOL = "coc-atibaia", serie = "3", draft = null, draftTipo = "provas";
 
-  function esc(s) { return (s == null ? "" : "" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function esc(s) { return (s == null ? "" : "" + s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+    // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function base() { return db.collection("schools").doc(SCHOOL).collection("series").doc(String(serie)); }
 
   function boot() {
@@ -57,7 +61,7 @@
   }
 
   /* ============================ ALUNOS EM RISCO ============================
-     Mostra os resumos ANÔNIMOS que os alunos optaram por compartilhar no
+     Mostra os resumos IDENTIFICADOS que os alunos optaram por compartilhar no
      Painel de Notas (botão "Compartilhar resumo com professores" — opt-in,
      escola não vê nota de quem não autorizou).
      Fonte: schools/{school}/series/{serie}/risco/{uid}. */
@@ -80,7 +84,7 @@
         }).join("");
         var nRisco = q.docs.filter(function (d) { return (d.data().pctMeta || 0) < 50; }).length;
         host.innerHTML = '<div class="abox"><h3>🚨 Alunos em risco — ' + serie + 'ª série (' + q.docs.length + ' compartilharam' + (nRisco ? ', <b style="color:#ff5b6e">' + nRisco + ' em risco</b>' : '') + ')</h3>'
-          + '<p class="amut">Dados anônimos: os alunos autorizam o compartilhamento em Notas.</p>'
+          + '<p class="amut">⚠️ Estes dados <b>identificam o aluno</b> (nome e e-mail) e foram compartilhados por escolha dele, em Notas. Use só para acompanhamento pedagógico.</p>'
           + '<div id="a-risklist">' + rows + '</div></div>';
       }).catch(function () {
         host.innerHTML = '<div class="abox"><h3>🚨 Alunos em risco</h3><p class="amut">Não consegui carregar agora.</p></div>';
@@ -97,10 +101,48 @@
 
   function setFileStatus(t) { var el = document.getElementById("a-filestatus"); if (el) el.textContent = t || ""; }
 
+  /* Limites de processamento (V-13 da auditoria). Sem eles, um arquivo enorme
+     ou com milhares de páginas congela o navegador de quem está publicando —
+     e nem precisa ser malicioso, um digitalizado pesado já basta. */
+  var MAX_ARQUIVO_MB = 15;
+  var MAX_PAGINAS = 60;
+  var MAX_SEGUNDOS = 25;
+
+  function comPrazo(promise, segundos, oQue) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, rej) {
+        setTimeout(function () {
+          rej(new Error(oQue + " demorou mais de " + segundos + "s e foi cancelado."));
+        }, segundos * 1000);
+      })
+    ]);
+  }
+
+  // Confere a assinatura real do arquivo, não a extensão nem o tipo declarado —
+  // os dois são escolhidos por quem envia. PDF começa com "%PDF-", DOCX é um
+  // zip, que começa com "PK".
+  function assinaturaOk(buf, isPdf) {
+    var b = new Uint8Array(buf, 0, 5);
+    if (isPdf) return b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d;
+    return b[0] === 0x50 && b[1] === 0x4b;
+  }
+
   // Lê o PDF no próprio navegador (PDF.js) e reconstrói as linhas pela posição do texto.
   function pdfToText(buf) {
     if (!window.pdfjsLib) return Promise.reject(new Error("Leitor de PDF ainda carregando — tente de novo em 1 segundo."));
-    return pdfjsLib.getDocument({ data: buf }).promise.then(function (pdf) {
+    // isEvalSupported:false desliga a avaliação dinâmica dentro do PDF.js. É a
+    // defesa recomendada contra a classe de falha do CVE-2024-4367, e continua
+    // valendo como cinto de segurança mesmo já estando numa versão corrigida.
+    return pdfjsLib.getDocument({
+      data: buf,
+      isEvalSupported: false,
+      disableAutoFetch: true,
+      disableRange: true
+    }).promise.then(function (pdf) {
+      if (pdf.numPages > MAX_PAGINAS) {
+        throw new Error("O PDF tem " + pdf.numPages + " páginas (limite: " + MAX_PAGINAS + "). Envie só as páginas do comunicado.");
+      }
       var pages = [];
       for (var p = 1; p <= pdf.numPages; p++) pages.push(p);
       return pages.reduce(function (chain, p) {
@@ -144,10 +186,23 @@
     var isPdf = /\.pdf$/.test(name) || f.type === "application/pdf";
     var isDocx = /\.docx$/.test(name) || f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     if (!isPdf && !isDocx) { alert("Envie um arquivo PDF ou Word (.docx). (Se for outro formato, abra e cole o texto na caixa.)"); return; }
+    if (f.size > MAX_ARQUIVO_MB * 1024 * 1024) {
+      alert("Arquivo muito grande (" + (f.size / 1048576).toFixed(1) + " MB). O limite é " + MAX_ARQUIVO_MB + " MB.\nSe for um comunicado digitalizado, tente exportar em qualidade menor ou colar o texto na caixa.");
+      return;
+    }
     setFileStatus("📄 Lendo “" + f.name + "”…");
     var r = new FileReader();
     r.onload = function (ev) {
-      var p = isPdf ? pdfToText(ev.target.result) : docxToText(ev.target.result);
+      if (!assinaturaOk(ev.target.result, isPdf)) {
+        setFileStatus("");
+        alert("Esse arquivo não é um " + (isPdf ? "PDF" : "Word (.docx)") + " de verdade — o nome diz que é, mas o conteúdo não bate.");
+        return;
+      }
+      var p = comPrazo(
+        isPdf ? pdfToText(ev.target.result) : docxToText(ev.target.result),
+        MAX_SEGUNDOS,
+        isPdf ? "A leitura do PDF" : "A leitura do Word"
+      );
       p.then(function (txt) {
         document.getElementById("a-paste").value = txt;
         setFileStatus("✓ Documento lido. Confira os cards abaixo e ajuste o que precisar.");
@@ -219,23 +274,80 @@
     }, Promise.resolve());
   }
 
+  /* Trilha de auditoria (V-15). Append-only: as regras não deixam nem quem
+     escreveu alterar depois. É registro de operação normal, não prova contra
+     má-fé — quem age poderia simplesmente não gravar. Nunca derruba a ação
+     principal: se a auditoria falhar, o publish continua. */
+  function auditar(acao, alvo, detalhe) {
+    try {
+      return db.collection("schools").doc(SCHOOL).collection("auditoria").doc().set({
+        ator: (Cloud.user && Cloud.user.email) || "?",
+        acao: acao, alvo: alvo, detalhe: String(detalhe || "").slice(0, 300),
+        quando: Date.now()
+      }).catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+
+  /* V-14 — publicação atômica por ponteiro de versão.
+     Antes: apagava tudo e regravava em lotes sequenciais. Uma queda de rede no
+     meio deixava a série com calendário pela metade, ou vazia, para sempre —
+     e sem rollback.
+     Agora: a versão nova é escrita SEM tocar na atual, e a troca é uma única
+     transação num único documento. Se cair no meio da subida, a versão
+     anterior continua ativa e o aluno não vê diferença. */
   function publish() {
     var items = collectDraft();
     if (!items.length) { alert("Nada para publicar."); return; }
     var tipoNome = draftTipo === "pc" ? "Produção Concreta" : "Provas";
     if (!confirm("Publicar " + items.length + " itens de " + tipoNome + " na " + serie + "ª série?\nIsso SUBSTITUI os itens atuais dessa categoria.")) return;
+
     var coll = base().collection(draftTipo);
-    coll.get().then(function (q) {
-      var ops = [];
-      q.docs.forEach(function (d) { ops.push(function (b) { b.delete(d.ref); }); });
-      items.forEach(function (it) { ops.push(function (b) { b.set(coll.doc(), it); }); });
-      var reg = (document.getElementById("a-regras") || {}).value || "";
-      ops.push(function (b) { b.set(base().collection("meta").doc("regras"), draftTipo === "pc" ? { pc: reg } : { provas: reg }, { merge: true }); });
-      return commitEmLotes(ops);
+    var novaVer = String(Date.now());
+    var reg = (document.getElementById("a-regras") || {}).value || "";
+
+    // 1) sobe a versão nova em paralelo à atual
+    var ops = items.map(function (it) {
+      var d = {}; for (var k in it) if (Object.prototype.hasOwnProperty.call(it, k)) d[k] = it[k];
+      d.ver = novaVer;
+      return function (b) { b.set(coll.doc(), d); };
+    });
+
+    commitEmLotes(ops).then(function () {
+      // 2) a troca: uma transação, um documento. É aqui que a publicação
+      //    "acontece" do ponto de vista do aluno.
+      var ptr = base().collection("meta").doc("ativo");
+      return db.runTransaction(function (t) {
+        return t.get(ptr).then(function (s) {
+          var d = (s.exists && s.data()) || {};
+          d[draftTipo] = novaVer;
+          t.set(ptr, d, { merge: true });
+        });
+      });
+    }).then(function () {
+      return base().collection("meta").doc("regras")
+        .set(draftTipo === "pc" ? { pc: reg } : { provas: reg }, { merge: true });
+    }).then(function () {
+      auditar("publicar", "series/" + serie + "/" + draftTipo, items.length + " itens · versão " + novaVer);
+      // 3) faxina das versões antigas — best-effort. Se falhar, sobra lixo
+      //    invisível, e nunca calendário quebrado.
+      return limparVersoes(coll, novaVer).catch(function () {});
     }).then(function () {
       alert("✅ Publicado! Os alunos da " + serie + "ª série já veem o novo calendário de " + tipoNome + ".");
       draft = null; render();
-    }).catch(function (e) { alert("Erro ao publicar: " + (e && e.message || e)); });
+    }).catch(function (e) {
+      alert("Erro ao publicar: " + (e && e.message || e) + "\n\nO calendário anterior continua no ar, intacto.");
+    });
+  }
+
+  function limparVersoes(coll, manter) {
+    return coll.get().then(function (q) {
+      var ops = [];
+      q.docs.forEach(function (d) {
+        var v = (d.data() || {}).ver;
+        if (v !== manter) ops.push(function (b) { b.delete(d.ref); });
+      });
+      return ops.length ? commitEmLotes(ops) : null;
+    });
   }
 
   function loadPublished() {

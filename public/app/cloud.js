@@ -419,9 +419,13 @@
         role: role, schoolId: SCHOOL, serie: data.serie || null, turma: data.turma || null,
         vestibulares: data.vestibulares || []
       };
-      // mantém role/nome sincronizados (staff pode ter mudado desde o último login)
-      if (!snap || !snap.exists || data.role !== role) {
-        db.collection("users").doc(user.uid).set({ email: profile.email, nome: profile.nome, role: role, schoolId: SCHOOL }, { merge: true }).catch(function () {});
+      // Grava só identificação. `role` e `schoolId` NÃO vão mais para cá:
+      // quem manda no papel é computeRole(), que lê o documento de staff, e as
+      // regras do Firestore rejeitam qualquer escrita que mexa nesses campos
+      // (V-11 da auditoria — antes o próprio aluno podia se declarar
+      // coordenação no próprio perfil).
+      if (!snap || !snap.exists || data.nome !== profile.nome || data.email !== profile.email) {
+        db.collection("users").doc(user.uid).set({ email: profile.email, nome: profile.nome }, { merge: true }).catch(function () {});
       }
       window._epRole = role;
       return profile.serie ? profile : null;
@@ -454,7 +458,11 @@
   function getAdminSerie() { try { return realLS.getItem("adminSerie") || null; } catch (e) { return null; } }
 
   function roleLabel(r) { return r === "coordenacao" ? "Coordenação" : (r === "professor" ? "Professor(a)" : "Aluno(a)"); }
-  function esc(s) { return (s == null ? "" : "" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function esc(s) { return (s == null ? "" : "" + s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+    // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function updateChipRole(profile) {
     var el = document.getElementById("cloud-role"); if (!el) return;
     el.textContent = profile.role === "coordenacao" ? "coord" : (profile.role === "professor" ? "prof" : (profile.serie ? profile.serie + "ª" + (profile.turma && profile.turma !== "—" ? " " + profile.turma : "") : "aluno"));
@@ -506,7 +514,10 @@
     if (!turma) { err.textContent = "Escolha sua turma."; return; }
     var role = window._epRole || "aluno";
     var vestibulares = obVestSel.slice(0, 3);
-    var doc = { email: user.email, nome: (user.displayName || user.email || "Aluno"), role: role, schoolId: SCHOOL, serie: serie, turma: turma, vestibulares: vestibulares };
+    // Sem `role` e sem `schoolId`: são campos de autoridade e o cliente não
+    // grava mais nenhum dos dois (V-11). O papel continua vindo de
+    // computeRole() e a escola é a constante SCHOOL, usada só em memória.
+    var doc = { email: user.email, nome: (user.displayName || user.email || "Aluno"), serie: serie, turma: turma, vestibulares: vestibulares };
     db.collection("users").doc(user.uid).set(doc, { merge: true }).then(function () {
       var o = document.getElementById("cloud-onboard"); if (o) o.remove();
       afterProfile({ uid: user.uid, email: doc.email, nome: doc.nome, role: role, schoolId: SCHOOL, serie: serie, turma: turma, vestibulares: vestibulares });
@@ -550,17 +561,28 @@
       Array.prototype.forEach.call(el.querySelectorAll(".ep-rm"), function (b) { b.addEventListener("click", function () { gestaoRemove(b.getAttribute("data-e")); }); });
     }).catch(function () { var el = document.getElementById("ep-stafflist"); if (el) el.textContent = "Não consegui carregar a lista."; });
   }
+  /* Trilha de auditoria (V-15): cadastrar e remover staff sao as acoes de
+     maior poder do sistema. Nunca derruba a acao principal se falhar. */
+  function auditar(acao, alvo, detalhe) {
+    try {
+      return db.collection("schools").doc(SCHOOL).collection("auditoria").doc().set({
+        ator: (user && user.email) || "?", acao: acao, alvo: alvo,
+        detalhe: String(detalhe || "").slice(0, 300), quando: Date.now()
+      }).catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+
   function gestaoAdd() {
     var email = (document.getElementById("ep-email").value || "").trim().toLowerCase();
     var role = document.getElementById("ep-role").value;
     if (!/^[^\s<>"'&]+@[^\s<>"'&]+\.[^\s<>"'&]+$/.test(email)) { alert("E-mail inválido."); return; }
     db.collection("schools").doc(SCHOOL).collection("staff").doc(email).set({ role: role, addedBy: user.email, addedAt: Date.now() })
-      .then(function () { document.getElementById("ep-email").value = ""; gestaoRefresh(); })
+      .then(function () { auditar("staff:adicionar", email, "papel " + role); document.getElementById("ep-email").value = ""; gestaoRefresh(); })
       .catch(function (e) { alert("Não consegui adicionar: " + (e && e.message || "erro")); });
   }
   function gestaoRemove(email) {
     if (!confirm("Remover " + email + " do staff? Ele volta a ser aluno.")) return;
-    db.collection("schools").doc(SCHOOL).collection("staff").doc(email).delete().then(gestaoRefresh).catch(function () { alert("Não consegui remover."); });
+    db.collection("schools").doc(SCHOOL).collection("staff").doc(email).delete().then(function () { auditar("staff:remover", email, ""); gestaoRefresh(); }).catch(function () { alert("Não consegui remover."); });
   }
 
   // expõe pouca coisa (a home usa onReady via CLOUD_PANEL)

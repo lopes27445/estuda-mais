@@ -251,7 +251,11 @@
   var state, marks = {}, pomo = { mode: "focus", remaining: 0, running: false, timer: null };
   function load() { try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; } if (!state || !state.registros) state = { registros: [] }; if (!state.pomo) state.pomo = { focus: 25, brk: 5, cycles: 0, totalMin: 0 }; if (!state.provas) state.provas = []; if (!state.dias) state.dias = {}; if (!state.badges) state.badges = []; if (state.meta == null) state.meta = 0; if (!state.vestTab) state.vestTab = "enem"; if (!state.metas) state.metas = []; if (!state.exercicios) state.exercicios = []; }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
-  function esc(s) { return (s == null ? "" : "" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function esc(s) { return (s == null ? "" : "" + s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+    // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function todayISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function fmtBR(iso) { if (!iso) return ""; var p = iso.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); }
   function pct(n, d) { return d ? Math.round(n / d * 100) : 0; }
@@ -1108,8 +1112,13 @@
     }).join("");
     return '<div class="box" id="prova-sec-' + inst + '">'
       + '<div class="toolbar" style="margin:0 0 2px"><h2 style="color:inherit;font-size:1.08rem;font-weight:800">📈 Sua evolução · ' + esc(cfg.sigla) + '</h2>'
+      + (window.Gabaritos && Gabaritos.temPara(inst)
+          ? '<button class="btn cyan small" data-cartao="' + inst + '">📝 Responder na plataforma</button>' : '')
       + '<button class="btn green small" data-novo="' + inst + '">＋ Registrar acertos</button></div>'
-      + '<div class="hint">Fez a prova passada ou um simulado? Registre quantas questões você acertou e acompanhe sua linha de evolução.</div>'
+      + '<div class="hint">'
+      + (window.Gabaritos && Gabaritos.temPara(inst)
+          ? 'Responda a prova aqui e o sistema corrige pelo gabarito oficial. Ou, se já fez e corrigiu por fora, registre só o número de acertos.'
+          : 'Fez a prova passada ou um simulado? Registre quantas questões você acertou e acompanhe sua linha de evolução.') + '</div>'
       + vestResumoInst(inst)
       + '<h3 style="margin:16px 0 4px">Linha de evolução</h3>'
       + vestProvaChartSVG(inst)
@@ -1124,6 +1133,8 @@
     if (!sec) return;
     var novo = sec.querySelector('[data-novo]');
     if (novo) novo.onclick = function () { window._vestInst = inst; window._vestMat = null; openProvaForm(); };
+    var cart = sec.querySelector('[data-cartao]');
+    if (cart) cart.onclick = function () { openCartao(inst); };
     Array.prototype.forEach.call(sec.querySelectorAll("[data-rmv]"), function (b) {
       b.onclick = function () { rmProva(b.getAttribute("data-rmv")); };
     });
@@ -1191,6 +1202,139 @@
     closeModal(); refreshProvasTudo(inst);
     avisaConquistas(novos);
   }
+  /* ==================== CARTÃO-RESPOSTA (responder na plataforma) ==========
+     O aluno lê a prova no PDF oficial (link já existe na aba de provas), marca
+     aqui o que assinalou, e o sistema corrige contra o gabarito da banca.
+
+     A VERSÃO é obrigatória e não tem padrão: a mesma prova sai em cadernos com
+     a ordem das questões trocada. Corrigir contra a versão errada devolve um
+     número plausível e falso — o pior tipo de erro, porque ninguém percebe. */
+
+  var CR_CSS = '<style>'
+    + '.cr-grid{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:8px;margin-top:10px}'
+    + '.cr-row{display:flex;align-items:center;gap:6px;padding:3px 2px}'
+    + '.cr-n{width:30px;text-align:right;font-size:.78rem;color:var(--mut);flex:none;font-variant-numeric:tabular-nums}'
+    + '.cr-o{flex:1;min-width:0;padding:6px 0;border:1px solid var(--line);background:transparent;color:var(--mut);'
+    + 'border-radius:8px;font:inherit;font-size:.78rem;font-weight:700;cursor:pointer}'
+    + '.cr-o.on{background:var(--cyan);border-color:var(--cyan);color:#04222b}'
+    + '.cr-row.certa .cr-o.on{background:#2fa64a;border-color:#2fa64a;color:#fff}'
+    + '.cr-row.errada .cr-o.on{background:#ff5b6e;border-color:#ff5b6e;color:#fff}'
+    + '.cr-row.errada .cr-o.gab{border-color:#2fa64a;color:#2fa64a}'
+    + '.cr-resumo{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0}'
+    + '.cr-card{flex:1;min-width:90px;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}'
+    + '.cr-card b{display:block;font-size:1.5rem;line-height:1.1}'
+    + '.cr-card span{font-size:.72rem;color:var(--mut)}'
+    + '</style>';
+
+  function openCartao(inst) {
+    var eds = window.Gabaritos ? Gabaritos.edicoes(inst) : [];
+    if (!eds.length) { alert("Ainda não tenho o gabarito oficial desta prova cadastrado."); return; }
+    window._cr = { inst: inst, ed: eds[0], respostas: [] };
+    var ed = window._cr.ed;
+
+    var linhas = "";
+    for (var i = 0; i < ed.total; i++) {
+      linhas += '<div class="cr-row" data-row="' + i + '"><span class="cr-n">' + (i + 1) + '</span>'
+        + ["A", "B", "C", "D", "E"].map(function (L) {
+            return '<button class="cr-o" data-q="' + i + '" data-a="' + L + '">' + L + '</button>';
+          }).join("")
+        + '</div>';
+    }
+
+    document.getElementById("modal-root").innerHTML = CR_CSS
+      + '<div class="overlay" id="cr-overlay"><div class="modal" style="max-width:620px">'
+      + '<h3>📝 Responder na plataforma</h3>'
+      + '<div class="field"><label>Edição</label>'
+      + '<select id="cr-ed">' + eds.map(function (e, i) {
+          return '<option value="' + i + '">' + esc(e.nome) + '</option>'; }).join("") + '</select></div>'
+      + '<div class="field"><label>Versão do seu caderno *</label>'
+      + '<select id="cr-ver"><option value="">— escolha a versão —</option>'
+      + Gabaritos.versoesDe(ed).map(function (v) { return '<option value="' + v + '">Prova ' + v + '</option>'; }).join("")
+      + '</select>'
+      + '<div class="hint" style="margin-top:6px">Está impressa na <b>capa do caderno</b>. '
+      + 'A ordem das questões muda de uma versão pra outra — corrigir pela versão errada dá um resultado errado <b>sem avisar</b>.</div></div>'
+      + '<div class="field"><label>Data em que você fez</label><input id="cr-data" type="date" value="' + todayISO() + '"></div>'
+      + '<div class="hint" id="cr-prog">0 de ' + ed.total + ' respondidas · deixar em branco vale como erro</div>'
+      + '<div class="cr-grid" id="cr-grid">' + linhas + '</div>'
+      + '<div class="modal-actions"><button class="btn ghost" id="cr-cancel">Cancelar</button>'
+      + '<button class="btn done" id="cr-go">Corrigir</button></div>'
+      + '</div></div>';
+
+    document.getElementById("cr-overlay").onclick = function (e) { if (e.target === this) closeModal(); };
+    document.getElementById("cr-cancel").onclick = closeModal;
+    document.getElementById("cr-go").onclick = corrigirCartao;
+    document.getElementById("cr-grid").onclick = function (e) {
+      var b = e.target.closest ? e.target.closest(".cr-o") : null; if (!b) return;
+      var q = +b.getAttribute("data-q"), a = b.getAttribute("data-a");
+      // clicar de novo na mesma letra desmarca
+      window._cr.respostas[q] = (window._cr.respostas[q] === a) ? "" : a;
+      var row = b.parentNode;
+      Array.prototype.forEach.call(row.querySelectorAll(".cr-o"), function (o) {
+        o.classList.toggle("on", o.getAttribute("data-a") === window._cr.respostas[q]);
+      });
+      var n = window._cr.respostas.filter(function (x) { return !!x; }).length;
+      document.getElementById("cr-prog").innerHTML = n + " de " + window._cr.ed.total
+        + " respondidas · deixar em branco vale como erro";
+    };
+  }
+
+  function corrigirCartao() {
+    var cr = window._cr; if (!cr) return;
+    var versao = val("cr-ver");
+    if (!versao) { alert("Escolha a versão do seu caderno antes de corrigir.\n\nEla está na capa da prova. Sem isso o resultado sairia errado."); return; }
+    var n = cr.respostas.filter(function (x) { return !!x; }).length;
+    if (!n) { alert("Marque pelo menos uma resposta."); return; }
+    if (n < cr.ed.total && !confirm("Você respondeu " + n + " de " + cr.ed.total + ".\nAs em branco contam como erro. Corrigir assim?")) return;
+
+    var r = Gabaritos.corrigir(cr.ed, versao, cr.respostas);
+    cr.resultado = r; cr.versao = versao;
+
+    // pinta o cartão: verde no acerto, vermelho no erro + contorno no gabarito
+    r.detalhe.forEach(function (d, i) {
+      var row = document.querySelector('.cr-row[data-row="' + i + '"]'); if (!row) return;
+      row.classList.remove("certa", "errada");
+      if (!d.marcada) return;
+      row.classList.add(d.ok ? "certa" : "errada");
+      if (!d.ok) {
+        var g = row.querySelector('.cr-o[data-a="' + d.certa + '"]');
+        if (g) g.classList.add("gab");
+      }
+    });
+
+    var pctAc = Math.round(r.acertos / r.total * 100);
+    document.getElementById("cr-prog").innerHTML =
+      '<div class="cr-resumo">'
+      + '<div class="cr-card"><b style="color:#2fa64a">' + r.acertos + '</b><span>acertos</span></div>'
+      + '<div class="cr-card"><b style="color:#ff5b6e">' + r.erros + '</b><span>erros</span></div>'
+      + '<div class="cr-card"><b>' + r.brancos + '</b><span>em branco</span></div>'
+      + '<div class="cr-card"><b style="color:var(--cyan)">' + pctAc + '%</b><span>de ' + r.total + '</span></div>'
+      + '</div>'
+      + '<div class="hint">Corrigido pelo gabarito oficial da <b>Prova ' + versao + '</b> · '
+      + 'conferido em ' + esc(cr.ed.conferido) + '. Verde = acertou · vermelho = errou, com o gabarito contornado.'
+      + (cr.ed.assuntos ? '' : '<br>O diagnóstico por assunto ainda não está disponível para esta edição.')
+      + '</div>';
+
+    var acoes = document.querySelector("#cr-overlay .modal-actions");
+    acoes.innerHTML = '<button class="btn ghost" id="cr-cancel2">Fechar</button>'
+      + '<button class="btn done" id="cr-save">Salvar na linha de evolução</button>';
+    document.getElementById("cr-cancel2").onclick = closeModal;
+    document.getElementById("cr-save").onclick = salvarCartao;
+    document.getElementById("cr-grid").scrollTop = 0;
+  }
+
+  function salvarCartao() {
+    var cr = window._cr; if (!cr || !cr.resultado) return;
+    state.provas.push({
+      id: "prova-" + Date.now(), instituicao: cr.inst, tipo: "passado",
+      nome: cr.ed.nome + " · " + cr.versao, data: val("cr-data") || todayISO(),
+      acertos: cr.resultado.acertos, total: cr.resultado.total
+    });
+    save(); markAtividade();
+    var novos = checkBadges();
+    closeModal(); refreshProvasTudo(cr.inst);
+    avisaConquistas(novos);
+  }
+
   function rmProva(id) {
     if (!confirm("Excluir este registro?")) return;
     var alvo = (state.provas.filter(function (p) { return p.id === id; })[0] || {}).instituicao;

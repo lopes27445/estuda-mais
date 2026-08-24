@@ -8,7 +8,11 @@ const AREAS = {
   Humanas:   {cls:"hum", dif:0.40, rotulo:"Humanas"}
 };
 const emptyBim = ()=>({av1:"",av2:"",pc:"",ave:"",medManual:""});
-function esc(s){ return (s==null?"":""+s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function esc(s) { return (s == null ? "" : "" + s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  // aspas tambem: sem isto, qualquer valor dentro de value="..." ou
+  // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function SEED(){
   const mk = (name,area,b1,extra)=>Object.assign({id:name.toLowerCase().replace(/[^a-z]/g,""),name,area,
     bims:[Object.assign(emptyBim(),b1),emptyBim(),emptyBim(),emptyBim()]}, extra);
@@ -109,7 +113,7 @@ function renderCards(){
       const m=medArred(b, s.semAV2), mb=mediaBim(b, s.semAV2);
       const cls = m==null?"empty":(mb&&mb.parcial?"parc":"");
       const sel = openEd[s.id]===i?"sel":"";
-      return `<div class="bim ${cls} ${sel}" onclick="toggleEd('${s.id}',${i})">
+      return `<div class="bim ${cls} ${sel}" onclick="toggleEd('${safeId(s.id)}',${i})">
         <div class="bl">B${i+1}</div><div class="bv">${fmt(m)}</div></div>`;
     }).join("");
 
@@ -119,18 +123,18 @@ function renderCards(){
       const b=s.bims[ei], mb=mediaBim(b, s.semAV2);
       const av2Field = s.semAV2
         ? `<div class="field"><label>AV2</label><input value="— não há —" disabled style="opacity:.5"><span class="lim">esta matéria não tem 2ª prova</span></div>`
-        : `<div class="field"><label>AV2</label><input inputmode="decimal" value="${b.av2}" onchange="setF('${s.id}',${ei},'av2',this.value)"><span class="lim">prova/DISP · 10</span></div>`;
+        : `<div class="field"><label>AV2</label><input inputmode="decimal" value="${esc(b.av2)}" onchange="setF('${safeId(s.id)}',${ei},'av2',this.value)"><span class="lim">prova/DISP · 10</span></div>`;
       editor=`<div class="editor open">
         <div class="ehead">✎ Notas do ${ei+1}º bimestre — ${esc(s.name)}</div>
         <div class="fields">
-          <div class="field"><label>AV1</label><input inputmode="decimal" value="${b.av1}" onchange="setF('${s.id}',${ei},'av1',this.value)"><span class="lim">prova · máx 10</span></div>
+          <div class="field"><label>AV1</label><input inputmode="decimal" value="${esc(b.av1)}" onchange="setF('${safeId(s.id)}',${ei},'av1',this.value)"><span class="lim">prova · máx 10</span></div>
           ${av2Field}
-          <div class="field"><label>PC</label><input inputmode="decimal" value="${b.pc}" onchange="setF('${s.id}',${ei},'pc',this.value)"><span class="lim">produção · máx 6</span></div>
-          <div class="field"><label>AVE</label><input inputmode="decimal" value="${b.ave}" onchange="setF('${s.id}',${ei},'ave',this.value)"><span class="lim">externa · máx 4</span></div>
+          <div class="field"><label>PC</label><input inputmode="decimal" value="${esc(b.pc)}" onchange="setF('${safeId(s.id)}',${ei},'pc',this.value)"><span class="lim">produção · máx 6</span></div>
+          <div class="field"><label>AVE</label><input inputmode="decimal" value="${esc(b.ave)}" onchange="setF('${safeId(s.id)}',${ei},'ave',this.value)"><span class="lim">externa · máx 4</span></div>
         </div>
         <div class="emed">Média deste bimestre: <span class="v">${mb?fmt(round05(mb.raw)):"—"}</span>
           ${mb?`<span class="muted">(bruta ${fmt(mb.raw)}${mb.parcial?" · parcial, faltam notas":""}${s.semAV2?" · média = (AV1+PC+AVE)÷2":""})</span>`:`<span class="muted">${s.semAV2?"— preencha ao menos a AV1, ou use a média direta abaixo":"— preencha as duas provas, ou use a média direta abaixo"}</span>`}</div>
-        <div class="field" style="max-width:200px;margin-top:8px"><label>Ou digite a média direto</label><input inputmode="decimal" value="${b.medManual}" onchange="setF('${s.id}',${ei},'medManual',this.value)" placeholder="ex.: 7,5"><span class="lim">útil p/ matérias com sub-disciplinas</span></div>
+        <div class="field" style="max-width:200px;margin-top:8px"><label>Ou digite a média direto</label><input inputmode="decimal" value="${esc(b.medManual)}" onchange="setF('${safeId(s.id)}',${ei},'medManual',this.value)" placeholder="ex.: 7,5"><span class="lim">útil p/ matérias com sub-disciplinas</span></div>
       </div>`;
     }
 
@@ -139,7 +143,7 @@ function renderCards(){
     card.innerHTML=`
       <div class="crow">
         <div><div class="disc">${esc(s.name)}</div>
-          <select class="tag ${a.cls}" style="appearance:auto;background:var(--chip)" onchange="setArea('${s.id}',this.value)">
+          <select class="tag ${a.cls}" style="appearance:auto;background:var(--chip)" onchange="setArea('${safeId(s.id)}',this.value)">
             ${Object.keys(AREAS).map(k=>`<option value="${k}" ${k===s.area?"selected":""}>${AREAS[k].rotulo}</option>`).join("")}
           </select>
         </div>
@@ -217,14 +221,14 @@ function renderConflicts(){
       <div class="num">${i+1}</div>
       <div class="fg"><label>Matéria</label>
         <select class="sel" onchange="setConf(${i},'subjId',this.value)">
-          ${state.subjects.map(s=>`<option value="${s.id}" ${s.id===c.subjId?"selected":""}>${esc(s.name)}</option>`).join("")}
+          ${state.subjects.map(s=>`<option value="${esc(s.id)}" ${s.id===c.subjId?"selected":""}>${esc(s.name)}</option>`).join("")}
         </select></div>
       <div class="fg"><label>Tipo</label>
         <select class="sel" onchange="setConf(${i},'tipo',this.value)">
           ${["Prova","Produção/Trabalho"].map(t=>`<option ${t===c.tipo?"selected":""}>${t}</option>`).join("")}
         </select></div>
       <div class="fg"><label>Média esperada neste bim (opcional)</label>
-        <input class="sel note" inputmode="decimal" value="${c.nota||""}" placeholder="ex.: 6" onchange="setConf(${i},'nota',this.value)"></div>
+        <input class="sel note" inputmode="decimal" value="${esc(c.nota||"")}" placeholder="ex.: 6" onchange="setConf(${i},'nota',this.value)"></div>
       <button class="btn ghost small" onclick="delConf(${i})" style="margin-left:auto">✕</button>`;
     wrap.appendChild(row);
   });
@@ -297,8 +301,46 @@ function exportar(){
   const url=URL.createObjectURL(blob), a=document.createElement("a");
   a.href=url; a.download="painel-notas-backup.json"; a.click(); URL.revokeObjectURL(url);
 }
-function importar(ev){ const f=ev.target.files[0]; if(!f) return; const r=new FileReader();
-  r.onload=e=>{ try{ const d=JSON.parse(e.target.result); if(!d.subjects) throw 0; state=d; if(!state.conflitos)state.conflitos=[];
+/* Saneamento da fronteira de importação (V-06 da auditoria).
+   Antes, o backup era aceito inteiro com `state=d` — a única checagem era
+   existir a chave `subjects`. As notas dos bimestres entram em value="…" e os
+   ids entram dentro de onclick="f('…')", então um arquivo preparado conseguia
+   fechar o atributo ou a string JS. Aqui tudo é recortado e tipado.
+   Ids não são escapados e sim restritos: em handler inline o navegador
+   decodifica a entidade antes do JS ler, então escape de HTML não protege. */
+function safeId(v){ return String(v==null?"":v).replace(/[^A-Za-z0-9_-]/g,""); }
+function _txt(v,lim){ return String(v==null?"":v).slice(0,lim||200); }
+function _nota(v){ const s=String(v==null?"":v).trim().slice(0,6); return /^[0-9]*[.,]?[0-9]*$/.test(s)?s:""; }
+
+function saneiaNotas(d){
+  if(!d || typeof d!=="object" || !Array.isArray(d.subjects)) throw 0;
+  const areas=Object.keys(AREAS);
+  const subjects=d.subjects.slice(0,60).map((s,i)=>({
+    id: safeId(s&&s.id) || ("s"+i),
+    name: _txt(s&&s.name,120),
+    area: areas.indexOf(s&&s.area)>=0 ? s.area : areas[0],
+    semAV2: !!(s&&s.semAV2),
+    bims: (Array.isArray(s&&s.bims)?s.bims:[]).slice(0,NBIM).map(b=>({
+      av1:_nota(b&&b.av1), av2:_nota(b&&b.av2), pc:_nota(b&&b.pc),
+      ave:_nota(b&&b.ave), medManual:_nota(b&&b.medManual)
+    }))
+  }));
+  // completa bimestres faltantes pra não quebrar o render
+  subjects.forEach(s=>{ while(s.bims.length<NBIM) s.bims.push({av1:"",av2:"",pc:"",ave:"",medManual:""}); });
+  const ids=subjects.map(s=>s.id);
+  const conflitos=(Array.isArray(d.conflitos)?d.conflitos:[]).slice(0,20)
+    .map(c=>({ subjId: ids.indexOf(safeId(c&&c.subjId))>=0 ? safeId(c.subjId) : (ids[0]||""),
+               tipo: _txt(c&&c.tipo,40), nota: _nota(c&&c.nota) }))
+    .filter(c=>c.subjId);
+  const bimAtual=Math.min(NBIM,Math.max(1,Number(d.bimAtual)||2));
+  if(!subjects.length) throw 0;
+  return {subjects, conflitos, bimAtual};
+}
+
+function importar(ev){ const f=ev.target.files[0]; if(!f) return;
+  if(f.size > 2*1024*1024){ alert("Backup grande demais (limite 2 MB)."); ev.target.value=""; return; }
+  const r=new FileReader();
+  r.onload=e=>{ try{ state=saneiaNotas(JSON.parse(e.target.result));
     const ing=state.subjects.find(s=>s.name==="Língua Inglesa"); if(ing&&!ing.semAV2) ing.semAV2=true;
     save(); renderAll(); alert("Backup importado!"); }catch(err){ alert("Arquivo inválido."); } ev.target.value=""; };
   r.readAsText(f); }
@@ -314,12 +356,41 @@ function resetSeed(){
    Grava um resumo (sem notas cruas, só situação por matéria) em
    schools/{school}/series/{serie}/risco/{uid} — só o próprio aluno escreve;
    professor/coordenação leem pra acompanhar quem está em risco. */
+/* V-05 da auditoria. O que mudou:
+   - o texto dizia "anônimo" e mandava nome, e-mail e uid. Agora diz a verdade
+     ANTES de enviar, e o e-mail saiu (a equipe já identifica pelo nome+turma,
+     então guardar o e-mail junto não servia a finalidade nenhuma).
+   - grava QUAL consentimento e QUANDO. Sem isso não há como provar que houve.
+   - dá pra revogar, e a revogação apaga o documento de verdade. */
+const CONSENT_VERSAO = "2026-08-24";
+const CONSENT_TEXTO =
+  "Compartilhar com professores e coordenação:\n\n" +
+  "• seu NOME e sua turma\n" +
+  "• a situação de cada matéria (ok / atenção / risco)\n" +
+  "• o quanto você já somou da meta do ano\n\n" +
+  "NÃO é anônimo — a equipe vê que é você.\n" +
+  "Finalidade: acompanhamento pedagógico, para te oferecerem ajuda.\n" +
+  "Suas notas exatas não são enviadas.\n\n" +
+  "Você pode desfazer quando quiser, no mesmo botão.\n\nConfirma?";
+
 let _riscoPending=false;
+function riscoRef(serie){
+  return Cloud.firestore().collection("schools").doc(Cloud.school())
+    .collection("series").doc(serie).collection("risco").doc(Cloud.user.uid);
+}
 function compartilharRisco(){
   if(!(window.Cloud && Cloud.user && Cloud.firestore())){ alert("Faça login primeiro."); return; }
   if(_riscoPending){ alert("Já tem um envio em andamento, aguarde."); return; }
   const serie=(window.EP && window.EP.serie) || "3";
-  const uid=Cloud.user.uid;
+  let jaCompartilhou=false;
+  try{ jaCompartilhou = localStorage.getItem("educa-risco-ok")==="1"; }catch(e){}
+
+  if(jaCompartilhou){
+    if(confirm("Você já compartilha seu resumo.\n\nOK = atualizar com as notas de agora\nCancelar = parar de compartilhar e apagar o que a escola vê")) {
+      // segue e atualiza
+    } else { revogarRisco(serie); return; }
+  } else if(!confirm(CONSENT_TEXTO)) { return; }
+
   const materias=state.subjects.map(s=>{
     const r=resumo(s), st=statusOf(r);
     return {id:s.id, name:s.name, acc:r.acc, precisa:r.precisa, fechou:r.fechou,
@@ -327,16 +398,25 @@ function compartilharRisco(){
   }).sort((a,b)=> a.status==="risco"?-1:1);
   let accTotal=0; materias.forEach(m=>accTotal+=m.acc);
   const pctMeta=Math.round(Math.min(100, accTotal/(META*state.subjects.length)*100));
-  const doc={ nome:Cloud.user.displayName||Cloud.user.email||"Aluno", email:Cloud.user.email,
-    serie:serie, turma:(window.EP && window.EP.turma)||"—", pctMeta, materias, atualizado:Date.now() };
+  const doc={ nome:Cloud.user.displayName||Cloud.user.email||"Aluno",
+    serie:serie, turma:(window.EP && window.EP.turma)||"—", pctMeta, materias,
+    atualizado:Date.now(), consentVersao:CONSENT_VERSAO, consentEm:Date.now() };
   _riscoPending=true;
-  Cloud.firestore().collection("schools").doc(Cloud.school()).collection("series").doc(serie).collection("risco").doc(uid)
-    .set(doc).then(function(){
+  riscoRef(serie).set(doc).then(function(){
       _riscoPending=false;
       const b=document.getElementById("btn-risco"); if(b) b.classList.add("on");
       try{ localStorage.setItem("educa-risco-ok","1"); }catch(e){}
-      alert("✅ Resumo compartilhado! Professores e coordenação verão suas matérias em destaque no painel de risco.");
+      alert("✅ Resumo compartilhado. Para desfazer, clique no mesmo botão e escolha Cancelar.");
     }).catch(function(e){ _riscoPending=false; alert("Não consegui compartilhar: "+(e&&e.message||"erro de conexão")); });
+}
+function revogarRisco(serie){
+  _riscoPending=true;
+  riscoRef(serie).delete().then(function(){
+    _riscoPending=false;
+    const b=document.getElementById("btn-risco"); if(b) b.classList.remove("on");
+    try{ localStorage.removeItem("educa-risco-ok"); }catch(e){}
+    alert("✅ Compartilhamento desfeito. Seu resumo foi apagado e a escola não vê mais.");
+  }).catch(function(e){ _riscoPending=false; alert("Não consegui desfazer: "+(e&&e.message||"erro")); });
 }
 function riscoUI(){
   const b=document.getElementById("btn-risco"); if(!b) return;
@@ -527,7 +607,7 @@ function renderEvolucao(){
 
   // ---- seletor ----
   const opts=[`<option value="">Média geral</option>`].concat(
-    state.subjects.map(s=>`<option value="${s.id}" ${s.id===selId?"selected":""}>${s_name(s)}</option>`)).join("");
+    state.subjects.map(s=>`<option value="${esc(s.id)}" ${s.id===selId?"selected":""}>${s_name(s)}</option>`)).join("");
 
   box.innerHTML=`
     <div class="panelbox">
