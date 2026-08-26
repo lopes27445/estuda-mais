@@ -318,3 +318,93 @@ describe("V-15 · auditoria não se apaga", () => {
     await assertFails(getDoc(doc(alunoDb, `schools/${ESCOLA}/auditoria/a1`)));
   });
 });
+
+/* ============ A0 — salas: o aluno pede, a coordenação aprova ============ */
+describe("A0 · matrícula em sala", () => {
+  const SALA = "3B";
+  const pedido = {
+    nome: "Aluno Teste", email: "aluno@escola.com", serie: "3", turma: "B",
+    status: "pendente", pedidoEm: Date.now()
+  };
+
+  it("32. aluno CONSEGUE pedir matrícula na própria conta", async () => {
+    await assertSucceeds(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), pedido)
+    );
+  });
+
+  it("33. o pedido NÃO pode nascer já aprovado", async () => {
+    await assertFails(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`),
+        Object.assign({}, pedido, { status: "aprovado" }))
+    );
+  });
+
+  it("34. aluno NÃO se aprova depois (é o A3 aplicado a aluno)", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), pedido);
+    });
+    await assertFails(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`),
+        { status: "aprovado" }, { merge: true })
+    );
+  });
+
+  it("35. aluno CONSEGUE corrigir os próprios dados sem tocar no status", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), pedido);
+    });
+    await assertSucceeds(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`),
+        { nome: "Aluno Corrigido" }, { merge: true })
+    );
+  });
+
+  it("36. aluno NÃO pede matrícula no lugar de outro", async () => {
+    await assertFails(
+      setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-outro`), pedido)
+    );
+  });
+
+  it("37. coordenação CONSEGUE aprovar", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), pedido);
+    });
+    await assertSucceeds(
+      setDoc(doc(coordDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`),
+        { status: "aprovado" }, { merge: true })
+    );
+  });
+
+  it("38. professor NÃO aprova matrícula", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), pedido);
+    });
+    await assertFails(
+      setDoc(doc(profDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`),
+        { status: "aprovado" }, { merge: true })
+    );
+  });
+
+  it("39. professor CONSEGUE ler a lista da sala (precisa disso pra dar aula)", async () => {
+    await assertSucceeds(getDocs(collection(profDb, `schools/${ESCOLA}/salas/${SALA}/alunos`)));
+  });
+
+  it("40. aluno NÃO lê a matrícula de outro aluno", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-outro`), pedido);
+    });
+    await assertFails(getDoc(doc(alunoDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-outro`)));
+  });
+
+  it("41. só coordenação cria ou altera a sala em si", async () => {
+    await assertFails(setDoc(doc(profDb, `schools/${ESCOLA}/salas/2A`), { serie: "2", turma: "A" }));
+    await assertSucceeds(setDoc(doc(coordDb, `schools/${ESCOLA}/salas/2A`), { serie: "2", turma: "A" }));
+  });
+
+  it("42. aluno NÃO pede matrícula em sala de outra escola", async () => {
+    await assertFails(
+      setDoc(doc(alunoDb, `schools/${OUTRA}/salas/${SALA}/alunos/uid-aluno`), pedido)
+    );
+  });
+});

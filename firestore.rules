@@ -153,6 +153,47 @@ service cloud.firestore {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
+    /* -------------------------------- salas ------------------------------ */
+    // A0: a sala vira entidade, e a matrícula tem dono — o aluno PEDE, a
+    // coordenação APROVA. Antes "turma" era uma letra que o próprio aluno
+    // digitava, sem nada por trás e sem ninguém conferindo.
+
+    function pedidoDeMatricula() {
+      return ['nome', 'email', 'serie', 'turma', 'status', 'pedidoEm'];
+    }
+
+    match /schools/{escola}/salas/{sala} {
+      allow read: if signedIn() && escolaConhecida(escola);
+      allow write: if ehCoord(escola);
+    }
+
+    match /schools/{escola}/salas/{sala}/alunos/{uid} {
+      // o aluno lê a própria matrícula (pra saber se já foi aprovado);
+      // staff lê a sala inteira, pra montar a fila e a lista da turma.
+      allow read: if signedIn() && escolaConhecida(escola)
+                  && (request.auth.uid == uid || ehStaff(escola));
+
+      // ESTA é a regra que sustenta o A0 inteiro: o aluno cria o PRÓPRIO
+      // pedido e ele nasce obrigatoriamente 'pendente'. Ninguém entra numa
+      // turma sozinho — é o mesmo princípio da V-01, aplicado a aluno.
+      allow create: if signedIn() && escolaConhecida(escola)
+                    && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(pedidoDeMatricula())
+                    && request.resource.data.status == 'pendente'
+                    && request.resource.data.serie is string
+                    && request.resource.data.turma is string;
+
+      // o aluno pode corrigir os próprios dados e reenviar o pedido, mas
+      // NUNCA mexer no status. Só coordenação aprova ou nega.
+      allow update: if ehCoord(escola)
+                    || (signedIn() && escolaConhecida(escola)
+                        && request.auth.uid == uid
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['nome', 'email', 'serie', 'turma', 'pedidoEm']));
+
+      allow delete: if ehCoord(escola) || (signedIn() && request.auth.uid == uid);
+    }
+
     /* ------------------------------ auditoria ---------------------------- */
     // V-15: trilha do que a equipe faz com poder — cadastrar staff, publicar
     // calendário. Append-only de verdade: nem quem escreveu consegue alterar

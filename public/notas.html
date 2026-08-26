@@ -180,6 +180,7 @@
 <script src="app/theme.js"></script>
 <script src="app/vendor/jspdf.umd.min.js"></script>
 <script src="app/firebase-config.js"></script>
+<script src="app/escola.js"></script>
 <script src="app/cloud.js"></script>
 <script>(function(){var t=null;try{t=localStorage.getItem("educa-theme")}catch(e){};if(t==="light")document.documentElement.classList.add("light");else if(t==="dark")document.documentElement.classList.remove("light");else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)document.documentElement.classList.add("light");})();</script>
 </head>
@@ -227,6 +228,7 @@
       <h2>Clique num bimestre (B1–B4) pra lançar/editar as notas</h2>
       <button class="btn ghost small" onclick="resetSeed()">↺ Limpar tudo</button>
     </div>
+    <div class="oficial" style="margin:0 0 14px;padding:10px 14px;border-radius:12px;background:rgba(58,214,255,.10);border:1px solid rgba(58,214,255,.35);color:var(--mut);font-size:.84rem;line-height:1.5">ℹ️ <b>Material de apoio.</b> As notas aqui são as que <b>você</b> digita, para simular cenários e acompanhar sua situação. <b>A nota que vale é a do sistema oficial da escola</b> — em caso de divergência, é sempre a da escola que conta.</div>
     <div class="grid" id="cards"></div>
   </section>
 

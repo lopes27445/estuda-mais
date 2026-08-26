@@ -491,8 +491,16 @@ function relatorioPDF(){
   linhas.forEach(l=>{ doc.text(l,24,y); y+=13; });
   y+=8;
   if(y>H-60){ doc.addPage(); y=30; }
+  // C2 — o relatório vai pros pais: é aqui que o aviso mais importa, porque é
+  // o único lugar em que a nota sai do app e circula como se fosse documento.
+  y+=6;
+  doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(120,90,10);
+  doc.text("Material de apoio — a nota oficial é a do sistema da escola.", 24, y); y+=11;
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(140,140,140);
+  doc.text("As notas deste relatório foram digitadas pelo próprio aluno para simulação e acompanhamento.", 24, y); y+=10;
+  doc.text("Em caso de divergência, vale sempre o registro oficial da escola.", 24, y); y+=12;
   doc.setFontSize(8); doc.setTextColor(150,150,150);
-  doc.text("estuda+ · painel do aluno · dados registrados pelo próprio aluno em "+new Date().toLocaleString("pt-BR"), 24, y);
+  doc.text("estuda+ · painel do aluno · gerado em "+new Date().toLocaleString("pt-BR"), 24, y);
   doc.save("relatorio-notas-"+mes.replace("/","-")+".pdf");
 }
 

@@ -432,9 +432,54 @@
     });
   }
 
+  /* ---- A0: matrícula em sala (o aluno pede, a coordenação aprova) ---- */
+  function matriculaRef(serie, turma) {
+    var sala = window.Escola && Escola.salaId(serie, turma);
+    if (!sala || !user) return null;
+    return db.collection("schools").doc(SCHOOL).collection("salas").doc(sala)
+             .collection("alunos").doc(user.uid);
+  }
+  /* Cria o pedido se ainda não existir. NUNCA reescreve um pedido existente —
+     senão uma matrícula já aprovada voltaria pra "pendente" a cada login (e as
+     regras nem deixariam, porque o aluno não pode tocar no status). */
+  function pedirMatricula(serie, turma) {
+    var ref = matriculaRef(serie, turma);
+    if (!ref) return Promise.resolve(null);
+    return ref.get().then(function (s) {
+      if (s.exists) return s.data();
+      var ped = {
+        nome: (user.displayName || user.email || "Aluno"), email: user.email,
+        serie: String(serie), turma: String(turma),
+        status: "pendente", pedidoEm: Date.now()
+      };
+      return ref.set(ped).then(function () { return ped; });
+    }).catch(function () { return null; });
+  }
+  function mostraStatusMatricula(m) {
+    if (!m || m.status === "aprovado") return;
+    var el = document.getElementById("ep-matricula");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "ep-matricula";
+      el.style.cssText = "margin:10px auto;max-width:900px;padding:10px 14px;border-radius:12px;"
+        + "background:rgba(255,194,75,.12);border:1px solid rgba(255,194,75,.45);"
+        + "color:#b07604;font-size:.85rem;line-height:1.5";
+      var w = document.querySelector(".wrap") || document.body;
+      w.insertBefore(el, w.firstChild);
+    }
+    el.innerHTML = "⏳ <b>Matrícula aguardando aprovação</b> — você pediu entrada na turma "
+      + esc(Escola.salaNome(m.serie, m.turma)) + ". Seus painéis funcionam normalmente; "
+      + "a coordenação precisa aprovar para os professores da escola te acompanharem.";
+  }
+
   function afterProfile(profile) {
     window.EP = profile;
     updateChipRole(profile);
+    if (profile.role === "aluno" && profile.serie && profile.turma) {
+      pedirMatricula(profile.serie, profile.turma).then(function (m) {
+        if (m) { profile.matricula = m.status; mostraStatusMatricula(m); }
+      });
+    }
     if (CFG.home) { hideBoot(); hideGate(); addAdminLink(profile); buildGestao(profile); if (CFG.onReady) CFG.onReady(user); return; }
     loadDoc().then(function () { installShim(); hideBoot(); hideGate(); applyAdminSerie(); injectApp(); });
   }

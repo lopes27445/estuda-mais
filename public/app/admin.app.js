@@ -52,12 +52,97 @@
       + '<div id="a-filestatus" class="amut" style="margin-bottom:8px"></div>'
       + '<textarea id="a-paste" placeholder="…ou cole aqui o texto do comunicado"></textarea>'
       + '<button class="abtn" id="a-parse">Analisar »</button></div>'
-      + '<div id="a-risk"></div><div id="a-review"></div><div id="a-published"></div>';
+      + '<div id="a-matriculas"></div><div id="a-risk"></div><div id="a-review"></div><div id="a-published"></div>';
     document.getElementById("a-serie").onchange = function () { serie = this.value; Cloud.setAdminSerie(serie); draft = null; render(); };
     document.getElementById("a-parse").onclick = doParse;
     document.getElementById("a-file").onchange = onFile;
     loadPublished();
     loadRisco();
+    loadMatriculas();
+  }
+
+  /* ======================= A0 · FILA DE MATRÍCULAS ========================
+     O aluno pede entrada numa turma; a coordenação aprova. Enquanto está
+     pendente ele não conta como aluno da sala para nenhum professor.
+
+     Por que enumera as turmas em vez de listar a coleção `salas`: o pedido do
+     aluno cria a SUBCOLEÇÃO `salas/{sala}/alunos`, e no Firestore uma
+     subcoleção existe sem o documento pai. Listar `salas` devolveria vazio. */
+  function salasDaSerie() {
+    var out = [];
+    (window.Escola ? Escola.TURMAS : ["A", "B", "C", "D", "—"]).forEach(function (t) {
+      var id = window.Escola ? Escola.salaId(serie, t) : null;
+      if (id) out.push({ id: id, turma: t });
+    });
+    return out;
+  }
+
+  function loadMatriculas() {
+    var host = document.getElementById("a-matriculas"); if (!host) return;
+    if (!Cloud.user) { host.innerHTML = ""; return; }
+    var ehCoord = window.EP && window.EP.role === "coordenacao";
+    var salas = salasDaSerie();
+    Promise.all(salas.map(function (s) {
+      return db.collection("schools").doc(SCHOOL).collection("salas").doc(s.id)
+        .collection("alunos").get()
+        .then(function (q) { return { sala: s, docs: q.docs }; })
+        .catch(function () { return { sala: s, docs: [] }; });
+    })).then(function (res) {
+      var pend = [], aprov = 0;
+      res.forEach(function (r) {
+        r.docs.forEach(function (d) {
+          var o = d.data(); o._uid = d.id; o._sala = r.sala;
+          if (o.status === "aprovado") aprov++; else pend.push(o);
+        });
+      });
+
+      if (!pend.length && !aprov) {
+        host.innerHTML = '<div class="abox"><h3>🎓 Matrículas — ' + serie + 'ª série</h3>'
+          + '<p class="amut">Nenhum aluno pediu entrada nas turmas desta série ainda. '
+          + 'O pedido é criado sozinho quando o aluno faz o cadastro no app.</p></div>';
+        return;
+      }
+
+      var linhas = pend.map(function (o) {
+        return '<div class="apub-row" style="display:flex;align-items:center;gap:8px">'
+          + '<span>' + esc(o.nome || "Aluno(a)") + ' · <b>' + esc(Escola.salaNome(o.serie, o.turma)) + '</b>'
+          + '<br><span class="amut" style="font-size:.78rem">' + esc(o.email || "") + '</span></span>'
+          + '<span style="margin-left:auto;display:flex;gap:6px">'
+          + (ehCoord
+              ? '<button class="abtn" data-apv="' + esc(o._sala.id) + '|' + esc(o._uid) + '">Aprovar</button>'
+                + '<button class="abtn danger" data-neg="' + esc(o._sala.id) + '|' + esc(o._uid) + '">Negar</button>'
+              : '<span class="amut">aguardando coordenação</span>')
+          + '</span></div>';
+      }).join("");
+
+      host.innerHTML = '<div class="abox"><h3>🎓 Matrículas — ' + serie + 'ª série'
+        + (pend.length ? ' (<b style="color:#ffc24b">' + pend.length + ' aguardando</b>)' : '') + '</h3>'
+        + '<p class="amut">' + aprov + ' aluno(s) aprovado(s) nesta série. '
+        + 'Enquanto o pedido está pendente, o aluno não aparece para os professores.</p>'
+        + (linhas || '<p class="amut">Nenhum pedido pendente. ✅</p>') + '</div>';
+
+      Array.prototype.forEach.call(host.querySelectorAll("[data-apv]"), function (b) {
+        b.onclick = function () { decidirMatricula(b.getAttribute("data-apv"), "aprovado"); };
+      });
+      Array.prototype.forEach.call(host.querySelectorAll("[data-neg]"), function (b) {
+        b.onclick = function () { decidirMatricula(b.getAttribute("data-neg"), "negado"); };
+      });
+    }).catch(function () {
+      host.innerHTML = '<div class="abox"><h3>🎓 Matrículas</h3><p class="amut">Não consegui carregar agora.</p></div>';
+    });
+  }
+
+  function decidirMatricula(chave, status) {
+    var p = String(chave).split("|"), sala = p[0], uid = p[1];
+    if (!sala || !uid) return;
+    if (status === "negado" && !confirm("Negar esta matrícula? O aluno continua usando o app, mas não fica vinculado à turma.")) return;
+    db.collection("schools").doc(SCHOOL).collection("salas").doc(sala).collection("alunos").doc(uid)
+      .set({ status: status, decididoEm: Date.now(), decididoPor: Cloud.user.email }, { merge: true })
+      .then(function () {
+        auditar("matricula:" + status, sala + "/" + uid, "");
+        loadMatriculas();
+      })
+      .catch(function (e) { alert("Não consegui salvar: " + (e && e.message || e)); });
   }
 
   /* ============================ ALUNOS EM RISCO ============================
