@@ -3,7 +3,7 @@
      quando tem internet; cai pro cache se estiver offline).
    - Ícones/manifest e o SDK do Firebase (gstatic): cache-first (são estáveis).
    - NÃO intercepta chamadas do Firestore/Auth (googleapis) — o SDK cuida do offline. */
-const CACHE = "painel-lab-v17";
+const CACHE = "painel-lab-v18";
 const SHELL = [
   "./",
   "./index.html",
@@ -13,6 +13,7 @@ const SHELL = [
   "./vestibular.html",
   "./manifest.webmanifest",
   "./app/escola.js",
+  "./app/activesoft.js",
   "./app/cloud.js",
   "./app/firebase-config.js",
   "./app/notas.app.js",

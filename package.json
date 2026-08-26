@@ -4,7 +4,7 @@
   "private": true,
   "description": "Estuda+ — painel lab. Este package.json existe só para testar as regras do Firestore; o app em public/ não usa build nem dependência de npm.",
   "scripts": {
-    "test": "firebase emulators:exec --only firestore --project demo-estuda-mais \"node --test test/rules.test.mjs test/gabaritos.test.mjs\""
+    "test": "firebase emulators:exec --only firestore --project demo-estuda-mais \"node --test test/rules.test.mjs test/gabaritos.test.mjs test/activesoft.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",

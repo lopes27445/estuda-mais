@@ -45,6 +45,94 @@ function load(){ try{ state = JSON.parse(localStorage.getItem(KEY)); }catch(e){ 
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); agendarPublicacao(); }
 
+/* ---------- C1: importar o boletim oficial da escola (Activesoft) ----------
+   O aluno sobe o PDF e as notas entram sozinhas. Nada é gravado antes de ele
+   ver o que vai entrar — a conferência é obrigatória, porque um erro de
+   leitura aqui viraria nota errada no painel sem ninguém perceber. */
+function importarBoletim(ev){
+  const f=ev.target.files[0]; if(!f) return; ev.target.value="";
+  if(!window.pdfjsLib){ alert("O leitor de PDF ainda está carregando. Tente de novo em 1 segundo."); return; }
+  if(!window.Activesoft){ alert("Módulo de leitura não carregou. Recarregue a página."); return; }
+  if(f.size > 15*1024*1024){ alert("Arquivo muito grande (limite 15 MB)."); return; }
+
+  const r=new FileReader();
+  r.onload=e=>{
+    const buf=e.target.result;
+    const b=new Uint8Array(buf,0,5);
+    if(!(b[0]===0x25&&b[1]===0x50&&b[2]===0x44&&b[3]===0x46)){ alert("Esse arquivo não é um PDF de verdade."); return; }
+    pdfjsLib.getDocument({data:buf, isEvalSupported:false}).promise
+      .then(pdf=>{
+        if(pdf.numPages>10) throw new Error("O boletim tem "+pdf.numPages+" páginas — esperava no máximo 10.");
+        const pgs=[]; for(let i=1;i<=pdf.numPages;i++) pgs.push(i);
+        return pgs.reduce((cad,n)=>cad.then(acc=>
+          pdf.getPage(n).then(p=>p.getTextContent()).then(tc=>{
+            tc.items.forEach(it=>{
+              if(!it.str||!it.str.trim()) return;
+              // transform[4]=x, [5]=y; y do PDF cresce pra cima, invertemos
+              acc.push({x:it.transform[4], y:-it.transform[5], t:it.str.trim()});
+            });
+            return acc;
+          })
+        ), Promise.resolve([]));
+      })
+      .then(tokens=>{
+        const lido=Activesoft.parseTokens(tokens);
+        previewBoletim(lido);
+      })
+      .catch(err=>alert("Não consegui ler o boletim: "+(err&&err.message||err)
+        +"\n\nSe o problema continuar, você ainda pode digitar as notas na mão."));
+  };
+  r.readAsArrayBuffer(f);
+}
+
+function previewBoletim(lido){
+  // aplica numa CÓPIA: o painel real só muda se você confirmar
+  const copia=JSON.parse(JSON.stringify(state.subjects));
+  const res=Activesoft.paraPainel(lido, copia);
+  const i=lido.info;
+
+  const linhas=copia.map((s,idx)=>{
+    const antes=state.subjects[idx];
+    const cels=s.bims.map((b,bi)=>{
+      const m=medArred(b,s.semAV2), mAntes=medArred(antes.bims[bi],antes.semAV2);
+      const mudou = String(m)!==String(mAntes);
+      return `<td style="text-align:center;padding:3px 6px${mudou?";color:var(--green);font-weight:800":""}">${m==null?"—":fmt(m)}</td>`;
+    }).join("");
+    return `<tr><td style="padding:3px 6px">${esc(s.name)}</td>${cels}</tr>`;
+  }).join("");
+
+  const naoAchou = res.naoAchadas.length
+    ? `<div style="color:var(--gold);font-size:.82rem;margin-top:8px">⚠ Não encontrei no boletim: ${res.naoAchadas.map(esc).join(", ")} — essas ficam como estão.</div>` : "";
+
+  document.getElementById("modal-root").innerHTML =
+    `<div class="overlay" id="bo-ov"><div class="modal" style="max-width:620px">
+      <h3>📄 Conferir antes de gravar</h3>
+      <div class="muted" style="font-size:.85rem;line-height:1.6">
+        <b>${esc(i.aluno||"—")}</b>${i.matricula?" · matrícula "+esc(i.matricula):""}<br>
+        ${i.serie?esc(i.serie)+"ª série":""}${i.turma?" "+esc(i.turma):""}${i.ano?" · "+esc(i.ano):""}${i.emissao?" · emitido em "+esc(i.emissao):""}
+      </div>
+      <div style="max-height:44vh;overflow:auto;margin-top:12px;border:1px solid var(--line);border-radius:10px">
+        <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+          <tr style="position:sticky;top:0;background:var(--card)"><th style="text-align:left;padding:4px 6px">Matéria</th>
+          <th>1º</th><th>2º</th><th>3º</th><th>4º</th></tr>${linhas}
+        </table>
+      </div>
+      <div class="muted" style="font-size:.8rem;margin-top:8px">Em <b style="color:var(--green)">verde</b>, o que muda. ${res.casadas.length} de ${copia.length} matérias encontradas.</div>
+      ${naoAchou}
+      <div class="modal-actions"><button class="btn ghost" id="bo-x">Cancelar</button>
+      <button class="btn done" id="bo-ok">Gravar estas notas</button></div>
+    </div></div>`;
+
+  document.getElementById("bo-ov").onclick=e=>{ if(e.target===e.currentTarget) fecharBoletim(); };
+  document.getElementById("bo-x").onclick=fecharBoletim;
+  document.getElementById("bo-ok").onclick=()=>{
+    state.subjects=copia; save(); fecharBoletim(); renderAll();
+    if(window.Cloud && Cloud.flushSync) Cloud.flushSync();
+    alert("✅ Notas importadas do boletim. Confira e ajuste o que precisar — lembrando que a nota oficial é sempre a da escola.");
+  };
+}
+function fecharBoletim(){ const m=document.getElementById("modal-root"); if(m) m.innerHTML=""; }
+
 /* ---------- B1: publicar a situação por matéria para os professores --------
    As notas cruas continuam num blob privado que só o dono lê. O que sai daqui
    é uma PROJEÇÃO por matéria — médias dos bimestres e situação — gravada em
@@ -116,21 +204,21 @@ function fmt(x){ return x==null?"—":x.toFixed(1).replace(".",","); }
 
 // returns {raw, parcial} or null. semAV2: matéria sem 2ª prova (ex.: Inglês) —
 // média = (AV1 + PC + AVE) ÷ 2 em vez de (AV1 + AV2 + PC + AVE) ÷ 3.
+/* DISP = prova dispensada. Conferido contra o boletim oficial em 26/08/2026:
+   o componente dispensado SAI da conta e o divisor cai de 3 para 2.
+   O código antigo copiava a nota da outra prova no lugar da dispensada, e isso
+   dava média errada — Redação com AV1 7,6 e AV2 dispensada dava 7,5 aqui e
+   8,0 no boletim da escola. Matéria sem AV2 (semAV2) segue a mesma regra. */
 function mediaBim(b, semAV2){
   let a1=num(b.av1), a2=num(b.av2), pc=num(b.pc), ave=num(b.ave);
-  if(!semAV2){
-    if(a1==="DISP") a1 = (typeof a2==="number")?a2:null;
-    if(a2==="DISP") a2 = (typeof a1==="number")?a1:null;
-    const temProvas = (typeof a1==="number")&&(typeof a2==="number");
-    if(temProvas){
-      const sum = a1+a2+(typeof pc==="number"?pc:0)+(typeof ave==="number"?ave:0);
-      const parcial = !(typeof pc==="number") || !(typeof ave==="number");
-      return {raw:sum/3, parcial};
-    }
-  } else if(typeof a1==="number"){
-    const sum = a1+(typeof pc==="number"?pc:0)+(typeof ave==="number"?ave:0);
+  const dispensou = semAV2 || a1==="DISP" || a2==="DISP";
+  if(a1==="DISP") a1=null;
+  if(a2==="DISP") a2=null;
+  const provas=[a1,a2].filter(v=>typeof v==="number");
+  if(provas.length >= (dispensou?1:2)){
+    const sum = provas.reduce((t,v)=>t+v,0)+(typeof pc==="number"?pc:0)+(typeof ave==="number"?ave:0);
     const parcial = !(typeof pc==="number") || !(typeof ave==="number");
-    return {raw:sum/2, parcial};
+    return {raw: sum/(dispensou?2:3), parcial};
   }
   const m=num(b.medManual);
   if(typeof m==="number") return {raw:m, parcial:false};

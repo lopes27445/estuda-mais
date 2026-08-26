@@ -163,6 +163,15 @@
   .foot{margin-top:26px;color:var(--mut);font-size:.8rem;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
   table.legend{font-size:.82rem;border-collapse:collapse;margin-top:6px}
   table.legend td{padding:2px 10px 2px 0}
+  /* modal da importação de boletim */
+  .overlay{position:fixed;inset:0;z-index:9200;background:rgba(4,8,14,.72);display:flex;
+    align-items:center;justify-content:center;padding:18px}
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;
+    width:100%;max-width:620px;max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+  .modal h3{margin:0 0 10px;font-size:1.1rem}
+  .modal table th{font-weight:700;font-size:.78rem;color:var(--mut)}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
 </style>
 
 <link rel="manifest" href="manifest.webmanifest">
@@ -181,6 +190,12 @@
 <script src="app/vendor/jspdf.umd.min.js"></script>
 <script src="app/firebase-config.js"></script>
 <script src="app/escola.js"></script>
+<script src="app/activesoft.js"></script>
+<script type="module">
+  import * as pdfjsLib from "./app/vendor/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "./app/vendor/pdf.worker.min.mjs";
+  window.pdfjsLib = pdfjsLib;
+</script>
 <script src="app/cloud.js"></script>
 <script>(function(){var t=null;try{t=localStorage.getItem("educa-theme")}catch(e){};if(t==="light")document.documentElement.classList.add("light");else if(t==="dark")document.documentElement.classList.remove("light");else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)document.documentElement.classList.add("light");})();</script>
 </head>
@@ -274,6 +289,12 @@
       <p class="muted" style="font-size:.86rem;line-height:1.7;margin-bottom:14px">
         Tudo o que você digita é salvo automaticamente <b>na sua conta Google</b>, na nuvem — abre igual em qualquer aparelho onde você entrar. O backup <b>.json</b> abaixo é opcional (útil pra guardar uma cópia ou migrar notas de outro lugar).
       </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <label class="btn cyan" style="cursor:pointer">📄 Importar boletim da escola (PDF)
+          <input type="file" accept="application/pdf" style="display:none" onchange="importarBoletim(event)">
+        </label>
+        <span class="muted" style="font-size:.8rem;align-self:center">Preenche suas notas a partir do boletim do Activesoft. Você confere antes de gravar.</span>
+      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn green" onclick="exportar()">⬇️ Baixar backup (.json)</button>
         <label class="btn cyan" style="cursor:pointer">⬆️ Importar backup
@@ -301,5 +322,6 @@
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
 </script>
 
+<div id="modal-root"></div>
 </body>
 </html>
