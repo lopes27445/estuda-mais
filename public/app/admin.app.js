@@ -52,13 +52,111 @@
       + '<div id="a-filestatus" class="amut" style="margin-bottom:8px"></div>'
       + '<textarea id="a-paste" placeholder="…ou cole aqui o texto do comunicado"></textarea>'
       + '<button class="abtn" id="a-parse">Analisar »</button></div>'
-      + '<div id="a-matriculas"></div><div id="a-risk"></div><div id="a-review"></div><div id="a-published"></div>';
+      + '<div id="a-turmas"></div><div id="a-matriculas"></div><div id="a-risk"></div><div id="a-review"></div><div id="a-published"></div>';
     document.getElementById("a-serie").onchange = function () { serie = this.value; Cloud.setAdminSerie(serie); draft = null; render(); };
     document.getElementById("a-parse").onclick = doParse;
     document.getElementById("a-file").onchange = onFile;
     loadPublished();
     loadRisco();
     loadMatriculas();
+    loadTurmas();
+  }
+
+  /* ===================== B1 · NOTAS DA MINHA MATÉRIA ======================
+     Professor vê os alunos da SUA matéria nas SUAS salas. Coordenação escolhe
+     qualquer matéria (A2). O filtro real é a regra do Firestore — o seletor
+     abaixo só evita pedir o que já se sabe que vai ser negado. */
+  var turmaMateria = null;
+
+  function materiasVisiveis() {
+    var M = (window.Escola ? Escola.MATERIAS : []);
+    if (!window.EP || window.EP.role === "coordenacao") return M;
+    var minhas = window.EP.materias || [];
+    return M.filter(function (m) { return minhas.indexOf(m.id) >= 0; });
+  }
+  function salasVisiveisDaSerie() {
+    var todas = salasDaSerie();
+    if (!window.EP || window.EP.role === "coordenacao") return todas;
+    var minhas = window.EP.salas || [];
+    return todas.filter(function (s) { return minhas.indexOf(s.id) >= 0; });
+  }
+
+  function quandoTexto(ts) {
+    if (!ts) return "sem data";
+    var h = Math.floor((Date.now() - ts) / 3600000);
+    if (h < 1) return "agora há pouco";
+    if (h < 24) return "há " + h + "h";
+    var d = Math.floor(h / 24);
+    return "há " + d + (d === 1 ? " dia" : " dias");
+  }
+
+  function loadTurmas() {
+    var host = document.getElementById("a-turmas"); if (!host) return;
+    if (!Cloud.user) { host.innerHTML = ""; return; }
+    var mats = materiasVisiveis(), salas = salasVisiveisDaSerie();
+
+    if (!mats.length || !salas.length) {
+      host.innerHTML = '<div class="abox"><h3>📊 Notas da minha matéria</h3>'
+        + '<p class="amut">'
+        + (window.EP && window.EP.role === "coordenacao"
+            ? 'Nenhuma sala nesta série ainda.'
+            : 'Você ainda não tem <b>matéria</b> ou <b>sala</b> atribuída. Peça à coordenação para definir seu escopo na tela de Gestão da página inicial.')
+        + '</p></div>';
+      return;
+    }
+    if (!turmaMateria || !mats.filter(function (m) { return m.id === turmaMateria; }).length) {
+      turmaMateria = mats[0].id;
+    }
+
+    host.innerHTML = '<div class="abox"><h3>📊 Notas da minha matéria — ' + serie + 'ª série</h3>'
+      + '<div class="arow"><label>Matéria:</label><select id="a-mat">'
+      + mats.map(function (m) {
+          return '<option value="' + esc(m.id) + '"' + (m.id === turmaMateria ? " selected" : "") + '>' + esc(m.nome) + '</option>';
+        }).join("")
+      + '</select></div><div id="a-turmalista"><p class="amut">Carregando…</p></div></div>';
+    document.getElementById("a-mat").onchange = function () { turmaMateria = this.value; loadTurmas(); };
+
+    Promise.all(salas.map(function (s) {
+      return db.collection("schools").doc(SCHOOL).collection("salas").doc(s.id)
+        .collection("materias").doc(turmaMateria).collection("notas").get()
+        .then(function (q) { return { sala: s, docs: q.docs }; })
+        .catch(function () { return { sala: s, docs: [], erro: true }; });
+    })).then(function (res) {
+      var out = res.map(function (r) {
+        if (!r.docs.length) {
+          return '<div style="margin-top:12px"><b>' + esc(r.sala.id) + '</b> '
+            + '<span class="amut">— nenhum aluno publicou ainda</span></div>';
+        }
+        var linhas = r.docs.map(function (d) { var o = d.data(); o._uid = d.id; return o; })
+          .sort(function (a, b) {
+            var ordem = { risco: 0, atencao: 1, ok: 2 };
+            return (ordem[a.status] - ordem[b.status]) || String(a.nome).localeCompare(String(b.nome));
+          })
+          .map(function (o) {
+            var cor = o.status === "risco" ? "#ff5b6e" : (o.status === "atencao" ? "#ffc24b" : "#2fa64a");
+            var rot = o.status === "risco" ? "risco" : (o.status === "atencao" ? "atenção" : "ok");
+            var meds = (o.medias || []).map(function (m, i) {
+              return '<span title="' + (i + 1) + 'º bim" style="display:inline-block;min-width:30px;text-align:center">'
+                + (m == null ? "—" : String(m).replace(".", ",")) + '</span>';
+            }).join("");
+            return '<div class="apub-row" style="display:flex;align-items:center;gap:10px">'
+              + '<span style="min-width:150px">' + esc(o.nome || "Aluno(a)") + '</span>'
+              + '<span style="font-variant-numeric:tabular-nums;font-size:.82rem">' + meds + '</span>'
+              + '<span style="margin-left:auto;display:flex;align-items:center;gap:10px">'
+              + '<span class="amut" style="font-size:.72rem">' + quandoTexto(o.atualizado) + '</span>'
+              + '<b style="color:' + cor + '">' + rot + '</b></span></div>';
+          }).join("");
+        var risco = r.docs.filter(function (d) { return (d.data() || {}).status === "risco"; }).length;
+        return '<div style="margin-top:14px"><b>' + esc(r.sala.id) + '</b> · ' + r.docs.length + ' aluno(s)'
+          + (risco ? ' · <b style="color:#ff5b6e">' + risco + ' em risco</b>' : '')
+          + '<div class="amut" style="font-size:.72rem;margin:2px 0 4px">B1 · B2 · B3 · B4 — médias publicadas pelo próprio aluno</div>'
+          + linhas + '</div>';
+      }).join("");
+      var el = document.getElementById("a-turmalista");
+      if (el) el.innerHTML = out + '<p class="amut" style="margin-top:14px;font-size:.76rem">'
+        + 'Os dados chegam quando o aluno abre o app — por isso cada linha mostra de quando é. '
+        + 'Aluno com matrícula pendente não aparece aqui.</p>';
+    });
   }
 
   /* ======================= A0 · FILA DE MATRÍCULAS ========================

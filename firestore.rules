@@ -153,6 +153,61 @@ service cloud.firestore {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
+    /* ------------------- A1/A2: escopo do professor ----------------------- */
+    // O staff passa a carregar `materias` e `salas`. Antes o papel era só
+    // aluno/professor/coordenacao e não havia vínculo nenhum com o que a
+    // pessoa realmente leciona — o campo de professor nas provas era texto
+    // livre, não referência.
+    //
+    // A2 é a exceção deliberada: coordenação ignora o filtro e vê tudo.
+
+    function staffInfo(escola) {
+      return get(staffDoc(escola)).data;
+    }
+    function ehProfessorDe(escola, sala, materia) {
+      return ehStaff(escola)
+             && (sala in staffInfo(escola).get('salas', []))
+             && (materia in staffInfo(escola).get('materias', []));
+    }
+    // lista canônica — a mesma de app/escola.js. Existe em duplicata de
+    // propósito: a regra não pode importar o JS, e sem ela o cliente criaria
+    // coleção com qualquer nome de matéria.
+    function materiaValida(m) {
+      return m in ['biologia', 'fisica', 'quimica', 'matematica', 'lingua-portuguesa',
+                   'lingua-inglesa', 'geografia', 'historia', 'sociologia', 'filosofia'];
+    }
+    function alunoAprovado(escola, sala, uid) {
+      return exists(/databases/$(database)/documents/schools/$(escola)/salas/$(sala)/alunos/$(uid))
+             && get(/databases/$(database)/documents/schools/$(escola)/salas/$(sala)/alunos/$(uid))
+                  .data.status == 'aprovado';
+    }
+
+    /* --------------- B1: professor vê as notas da matéria dele ------------ */
+    // Projeção por matéria, escrita pelo navegador do próprio aluno — é o
+    // único caminho possível sem backend, já que as notas cruas vivem num blob
+    // privado que ninguém além do dono consegue ler.
+    //
+    // Consequência honesta, e por isso `atualizado` é obrigatório: o professor
+    // vê a foto do último momento em que o aluno abriu o app, não o estado de
+    // agora. A tela precisa mostrar essa data em vez de fingir que é ao vivo.
+    match /schools/{escola}/salas/{sala}/materias/{materia}/notas/{uid} {
+      allow read: if signedIn() && escolaConhecida(escola)
+                  && (request.auth.uid == uid
+                      || ehCoord(escola)
+                      || ehProfessorDe(escola, sala, materia));
+
+      allow create, update: if signedIn() && escolaConhecida(escola)
+                            && request.auth.uid == uid
+                            && materiaValida(materia)
+                            && alunoAprovado(escola, sala, uid)
+                            && request.resource.data.keys().hasOnly(
+                                 ['nome', 'status', 'acc', 'precisa', 'fechou',
+                                  'medias', 'atualizado'])
+                            && request.resource.data.atualizado is number;
+
+      allow delete: if (signedIn() && request.auth.uid == uid) || ehCoord(escola);
+    }
+
     /* -------------------------------- salas ------------------------------ */
     // A0: a sala vira entidade, e a matrícula tem dono — o aluno PEDE, a
     // coordenação APROVA. Antes "turma" era uma letra que o próprio aluno

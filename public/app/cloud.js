@@ -400,11 +400,20 @@
   ];
   var obVestSel = [];
 
+  /* A1: além do papel, o staff agora carrega QUAIS matérias e QUAIS salas são
+     dele. Antes o papel era só aluno/professor/coordenacao e não havia vínculo
+     nenhum com o que a pessoa realmente leciona.
+     Continua caindo pra "aluno" em qualquer falha — degradar pra menos poder,
+     nunca pra mais. */
   function computeRole() {
-    if (user.email === MASTER) return Promise.resolve("coordenacao");
+    var vazio = { role: "aluno", materias: [], salas: [] };
+    if (user.email === MASTER) return Promise.resolve({ role: "coordenacao", materias: [], salas: [] });
     return db.collection("schools").doc(SCHOOL).collection("staff").doc(user.email).get()
-      .then(function (s) { return (s.exists && s.data().role) ? s.data().role : "aluno"; })
-      .catch(function () { return "aluno"; });
+      .then(function (s) {
+        var d = (s.exists && s.data()) || {};
+        return { role: d.role || "aluno", materias: d.materias || [], salas: d.salas || [] };
+      })
+      .catch(function () { return vazio; });
   }
 
   function ensureProfile() {
@@ -412,12 +421,13 @@
       db.collection("users").doc(user.uid).get().catch(function () { return null; }),
       computeRole()
     ]).then(function (res) {
-      var snap = res[0], role = res[1];
+      var snap = res[0], st = res[1], role = st.role;
       var data = (snap && snap.exists) ? snap.data() : {};
       var profile = {
         uid: user.uid, email: user.email, nome: (user.displayName || user.email || "Aluno"),
         role: role, schoolId: SCHOOL, serie: data.serie || null, turma: data.turma || null,
-        vestibulares: data.vestibulares || []
+        vestibulares: data.vestibulares || [],
+        materias: st.materias || [], salas: st.salas || []   // A1: escopo do professor
       };
       // Grava só identificação. `role` e `schoolId` NÃO vão mais para cá:
       // quem manda no papel é computeRole(), que lê o documento de staff, e as
@@ -595,16 +605,93 @@
     document.getElementById("ep-add").addEventListener("click", gestaoAdd);
     gestaoRefresh();
   }
+  /* A1: escopo do professor — quais matérias e quais salas são dele.
+     Coordenação não recebe escopo: por definição ela vê tudo (A2). */
+  function escopoHTML(email, materias, salas) {
+    var M = (window.Escola ? Escola.MATERIAS : []);
+    var mats = M.map(function (m) {
+      return '<label style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 6px 0;font-size:.8rem">'
+        + '<input type="checkbox" data-mat="' + esc(m.id) + '"' + (materias.indexOf(m.id) >= 0 ? " checked" : "") + '> '
+        + esc(m.nome) + '</label>';
+    }).join("");
+    var linhas = (window.Escola ? Escola.SERIES : []).map(function (s) {
+      var turmas = Escola.TURMAS.map(function (t) {
+        var id = Escola.salaId(s, t); if (!id) return "";
+        return '<label style="display:inline-flex;align-items:center;gap:4px;margin:0 8px 4px 0;font-size:.8rem">'
+          + '<input type="checkbox" data-sala="' + esc(id) + '"' + (salas.indexOf(id) >= 0 ? " checked" : "") + '> '
+          + esc(t === "—" ? "única" : t) + '</label>';
+      }).join("");
+      return '<div style="margin-bottom:4px"><b style="font-size:.78rem">' + s + 'ª série:</b> ' + turmas + '</div>';
+    }).join("");
+    return '<div class="ep-escopo" data-for="' + esc(email) + '" style="display:none;padding:10px;margin-top:6px;'
+      + 'border:1px solid var(--line, #1e2a40);border-radius:10px">'
+      + '<div style="font-size:.78rem;opacity:.75;margin-bottom:6px">Matérias que leciona</div>' + mats
+      + '<div style="font-size:.78rem;opacity:.75;margin:8px 0 6px">Salas</div>' + linhas
+      + '<button class="ep-salvar" data-e="' + esc(email) + '" style="margin-top:6px">Salvar escopo</button>'
+      + '</div>';
+  }
+
   function gestaoRefresh() {
     db.collection("schools").doc(SCHOOL).collection("staff").get().then(function (q) {
       var el = document.getElementById("ep-stafflist"); if (!el) return;
       if (q.empty) { el.innerHTML = "Nenhum professor/coordenador cadastrado ainda."; return; }
       el.innerHTML = q.docs.map(function (d) {
-        var r = d.data().role;
-        return '<div class="ep-staffrow"><span>' + esc(d.id) + ' &nbsp;<b style="color:' + (r === "coordenacao" ? "#ffc24b" : "#2fa64a") + '">' + (r === "coordenacao" ? "coordenação" : "professor") + '</b></span><button class="ep-rm" data-e="' + esc(d.id) + '">remover</button></div>';
+        var o = d.data(), r = o.role;
+        var materias = o.materias || [], salas = o.salas || [];
+        var resumo;
+        if (r === "coordenacao") {
+          resumo = '<span style="font-size:.76rem;opacity:.7">vê todas as matérias e salas</span>';
+        } else if (!materias.length || !salas.length) {
+          resumo = '<span style="font-size:.76rem;color:#ffc24b">⚠ sem escopo — não vê nenhum aluno</span>';
+        } else {
+          resumo = '<span style="font-size:.76rem;opacity:.7">'
+            + materias.map(function (m) { return esc(Escola.materiaNome(m)); }).join(", ")
+            + ' · ' + salas.map(esc).join(", ") + '</span>';
+        }
+        return '<div class="ep-staffrow" style="display:block">'
+          + '<div style="display:flex;align-items:center;gap:8px">'
+          + '<span>' + esc(d.id) + ' &nbsp;<b style="color:' + (r === "coordenacao" ? "#ffc24b" : "#2fa64a") + '">'
+          + (r === "coordenacao" ? "coordenação" : "professor") + '</b></span>'
+          + '<span style="margin-left:auto;display:flex;gap:6px">'
+          + (r === "coordenacao" ? "" : '<button class="ep-esc" data-e="' + esc(d.id) + '">escopo</button>')
+          + '<button class="ep-rm" data-e="' + esc(d.id) + '">remover</button></span></div>'
+          + '<div style="margin-top:2px">' + resumo + '</div>'
+          + (r === "coordenacao" ? "" : escopoHTML(d.id, materias, salas))
+          + '</div>';
       }).join("");
-      Array.prototype.forEach.call(el.querySelectorAll(".ep-rm"), function (b) { b.addEventListener("click", function () { gestaoRemove(b.getAttribute("data-e")); }); });
+
+      Array.prototype.forEach.call(el.querySelectorAll(".ep-rm"), function (b) {
+        b.addEventListener("click", function () { gestaoRemove(b.getAttribute("data-e")); });
+      });
+      Array.prototype.forEach.call(el.querySelectorAll(".ep-esc"), function (b) {
+        b.addEventListener("click", function () {
+          var p = el.querySelector('.ep-escopo[data-for="' + b.getAttribute("data-e").replace(/"/g, '\\"') + '"]');
+          if (p) p.style.display = (p.style.display === "none" ? "block" : "none");
+        });
+      });
+      Array.prototype.forEach.call(el.querySelectorAll(".ep-salvar"), function (b) {
+        b.addEventListener("click", function () { gestaoSalvarEscopo(b, el); });
+      });
     }).catch(function () { var el = document.getElementById("ep-stafflist"); if (el) el.textContent = "Não consegui carregar a lista."; });
+  }
+
+  function gestaoSalvarEscopo(botao, el) {
+    var email = botao.getAttribute("data-e");
+    var painel = botao.parentNode;
+    var materias = [], salas = [];
+    Array.prototype.forEach.call(painel.querySelectorAll("[data-mat]"), function (c) {
+      if (c.checked) materias.push(c.getAttribute("data-mat"));
+    });
+    Array.prototype.forEach.call(painel.querySelectorAll("[data-sala]"), function (c) {
+      if (c.checked) salas.push(c.getAttribute("data-sala"));
+    });
+    if (!materias.length || !salas.length) {
+      if (!confirm("Sem matéria ou sem sala, este professor não vai ver aluno nenhum. Salvar assim?")) return;
+    }
+    db.collection("schools").doc(SCHOOL).collection("staff").doc(email)
+      .set({ materias: materias, salas: salas }, { merge: true })
+      .then(function () { auditar("staff:escopo", email, materias.join(",") + " | " + salas.join(",")); gestaoRefresh(); })
+      .catch(function (e) { alert("Não consegui salvar: " + (e && e.message || "erro")); });
   }
   /* Trilha de auditoria (V-15): cadastrar e remover staff sao as acoes de
      maior poder do sistema. Nunca derruba a acao principal se falhar. */

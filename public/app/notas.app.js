@@ -43,7 +43,69 @@ function load(){ try{ state = JSON.parse(localStorage.getItem(KEY)); }catch(e){ 
   // tinha o boletim salvo antes dessa flag existir (senão o cálculo ficaria errado).
   const ing=state.subjects.find(s=>s.name==="Língua Inglesa"); if(ing&&!ing.semAV2){ ing.semAV2=true; save(); }
 }
-function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); agendarPublicacao(); }
+
+/* ---------- B1: publicar a situação por matéria para os professores --------
+   As notas cruas continuam num blob privado que só o dono lê. O que sai daqui
+   é uma PROJEÇÃO por matéria — médias dos bimestres e situação — gravada em
+   schools/{escola}/salas/{sala}/materias/{materia}/notas/{uid}, que só o
+   professor daquela matéria naquela sala (e a coordenação) consegue ler.
+
+   Duas honestidades embutidas:
+   1. Quem grava é o navegador do aluno, porque sem backend não existe outro
+      caminho. Logo o professor vê a foto do último acesso, não o agora — por
+      isso `atualizado` vai junto e a tela dele mostra a data.
+   2. Se a matrícula ainda está pendente, NADA é publicado e o aviso de
+      visibilidade não aparece. O aviso só existe quando é verdade. */
+let _pubTimer = null;
+function agendarPublicacao(){ clearTimeout(_pubTimer); _pubTimer = setTimeout(publicarNotas, 1500); }
+
+function publicarNotas(){
+  if(!(window.Cloud && Cloud.user && Cloud.firestore && Cloud.firestore() && window.EP && window.Escola)) return;
+  if(window.EP.role !== "aluno") return;
+  const sala = Escola.salaId(window.EP.serie, window.EP.turma);
+  if(!sala) return;
+  const db = Cloud.firestore(), uid = Cloud.user.uid;
+  const raiz = db.collection("schools").doc(Cloud.school()).collection("salas").doc(sala);
+
+  raiz.collection("alunos").doc(uid).get().then(function(s){
+    if(!s.exists || s.data().status !== "aprovado") return;   // pendente: não publica nada
+    const agora = Date.now();
+    const nome = Cloud.user.displayName || Cloud.user.email || "Aluno";
+    let publicadas = 0;
+    state.subjects.forEach(function(sub){
+      const mat = Escola.materiaPorNome(sub.name);
+      if(!mat) return;                    // matéria fora da lista canônica não é publicada
+      const r = resumo(sub), st = statusOf(r);
+      publicadas++;
+      raiz.collection("materias").doc(mat.id).collection("notas").doc(uid).set({
+        nome: nome,
+        status: st.cls==="green" ? "ok" : (st.cls==="red" ? "risco" : "atencao"),
+        acc: Math.round(r.acc*100)/100,
+        // precisa pode ser Infinity quando não há bimestre restante — o
+        // Firestore não aceita Infinity, então vira um teto numérico
+        precisa: isFinite(r.precisa) ? Math.round(Math.min(99, r.precisa)*100)/100 : 99,
+        fechou: !!r.fechou,
+        medias: sub.bims.map(function(b){ const v = medArred(b, sub.semAV2); return v==null ? null : v; }),
+        atualizado: agora
+      }).catch(function(){});
+    });
+    avisoVisibilidade(publicadas);
+  }).catch(function(){});
+}
+
+function avisoVisibilidade(n){
+  if(!n) return;
+  const host = document.querySelector(".oficial");
+  if(!host || document.getElementById("aviso-visivel")) return;
+  const d = document.createElement("div");
+  d.id = "aviso-visivel";
+  d.style.cssText = "margin-top:8px;padding-top:8px;border-top:1px solid rgba(58,214,255,.25)";
+  d.innerHTML = "👁️ <b>Seus professores acompanham a sua situação.</b> Cada professor vê apenas "
+    + "a matéria que leciona para a sua turma — médias dos bimestres e se você está tranquilo, "
+    + "em atenção ou em risco. A coordenação vê todas.";
+  host.appendChild(d);
+}
 
 /* ---------- math helpers ---------- */
 function num(v){ if(v===""||v==null) return null;

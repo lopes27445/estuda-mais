@@ -408,3 +408,124 @@ describe("A0 · matrícula em sala", () => {
     );
   });
 });
+
+/* ====== A1/A2/B1 — professor vê as notas da matéria e da sala dele ====== */
+describe("A1/A2/B1 · escopo do professor sobre notas", () => {
+  const SALA = "3B", MAT = "matematica", OUTRAMAT = "biologia";
+  const caminho = (sala, mat, uid) =>
+    `schools/${ESCOLA}/salas/${sala}/materias/${mat}/notas/${uid}`;
+  const nota = {
+    nome: "Aluno Teste", status: "risco", acc: 12, precisa: 8, fechou: false,
+    medias: [6, 6, null, null], atualizado: Date.now()
+  };
+
+  async function semear({ aprovado = true, salasProf = [SALA], materiasProf = [MAT] } = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), {
+        nome: "Aluno Teste", email: "aluno@escola.com", serie: "3", turma: "B",
+        status: aprovado ? "aprovado" : "pendente", pedidoEm: Date.now()
+      });
+      await setDoc(doc(db, `schools/${ESCOLA}/staff/prof@escola.com`), {
+        role: "professor", salas: salasProf, materias: materiasProf
+      });
+    });
+  }
+
+  it("43. aluno aprovado CONSEGUE publicar a nota da matéria", async () => {
+    await semear();
+    await assertSucceeds(setDoc(doc(alunoDb, caminho(SALA, MAT, "uid-aluno")), nota));
+  });
+
+  it("44. aluno PENDENTE não publica nada (a fila de A0 vale de verdade)", async () => {
+    await semear({ aprovado: false });
+    await assertFails(setDoc(doc(alunoDb, caminho(SALA, MAT, "uid-aluno")), nota));
+  });
+
+  it("45. matéria fora da lista canônica é recusada", async () => {
+    await semear();
+    await assertFails(setDoc(doc(alunoDb, caminho(SALA, "matematica-avancada", "uid-aluno")), nota));
+  });
+
+  it("46. aluno NÃO publica nota no lugar de outro", async () => {
+    await semear();
+    await assertFails(setDoc(doc(alunoDb, caminho(SALA, MAT, "uid-outro")), nota));
+  });
+
+  it("47. professor da sala+matéria CONSEGUE ler", async () => {
+    await semear();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), caminho(SALA, MAT, "uid-aluno")), nota);
+    });
+    await assertSucceeds(getDocs(collection(profDb, `schools/${ESCOLA}/salas/${SALA}/materias/${MAT}/notas`)));
+  });
+
+  it("48. professor NÃO lê matéria que não é dele", async () => {
+    await semear({ materiasProf: [MAT] });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), caminho(SALA, OUTRAMAT, "uid-aluno")), nota);
+    });
+    await assertFails(getDoc(doc(profDb, caminho(SALA, OUTRAMAT, "uid-aluno"))));
+  });
+
+  it("49. professor NÃO lê sala que não é dele", async () => {
+    await semear({ salasProf: ["3A"] });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), caminho(SALA, MAT, "uid-aluno")), nota);
+    });
+    await assertFails(getDoc(doc(profDb, caminho(SALA, MAT, "uid-aluno"))));
+  });
+
+  it("50. professor SEM vínculo nenhum não lê nada", async () => {
+    await semear({ salasProf: [], materiasProf: [] });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), caminho(SALA, MAT, "uid-aluno")), nota);
+    });
+    await assertFails(getDoc(doc(profDb, caminho(SALA, MAT, "uid-aluno"))));
+  });
+
+  it("51. A2: coordenação lê qualquer sala e qualquer matéria", async () => {
+    await semear({ salasProf: [] });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), caminho(SALA, OUTRAMAT, "uid-aluno")), nota);
+    });
+    await assertSucceeds(getDoc(doc(coordDb, caminho(SALA, OUTRAMAT, "uid-aluno"))));
+  });
+
+  it("52. o aluno continua lendo a própria projeção", async () => {
+    await semear();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), caminho(SALA, MAT, "uid-aluno")), nota);
+    });
+    await assertSucceeds(getDoc(doc(alunoDb, caminho(SALA, MAT, "uid-aluno"))));
+  });
+
+  it("53. professor NÃO escreve nota de aluno", async () => {
+    await semear();
+    await assertFails(setDoc(doc(profDb, caminho(SALA, MAT, "uid-aluno")), nota));
+  });
+
+  it("54. campo fora do formato é recusado", async () => {
+    await semear();
+    await assertFails(setDoc(doc(alunoDb, caminho(SALA, MAT, "uid-aluno")),
+      Object.assign({}, nota, { observacao: "<script>" })));
+  });
+
+  it("55. `atualizado` é obrigatório — a tela precisa mostrar a data", async () => {
+    await semear();
+    const semData = Object.assign({}, nota); delete semData.atualizado;
+    await assertFails(setDoc(doc(alunoDb, caminho(SALA, MAT, "uid-aluno")), semData));
+  });
+
+  it("56. professor NÃO se atribui sala ou matéria (segue valendo a V-01)", async () => {
+    await semear();
+    await assertFails(setDoc(doc(profDb, `schools/${ESCOLA}/staff/prof@escola.com`),
+      { salas: ["3A", "3B", "3C"], materias: ["matematica", "biologia"] }, { merge: true }));
+  });
+
+  it("57. coordenação CONSEGUE atribuir sala e matéria ao professor", async () => {
+    await semear();
+    await assertSucceeds(setDoc(doc(coordDb, `schools/${ESCOLA}/staff/prof@escola.com`),
+      { salas: ["3A"], materias: ["biologia"] }, { merge: true }));
+  });
+});
