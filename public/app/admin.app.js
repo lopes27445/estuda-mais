@@ -311,6 +311,47 @@
     return b[0] === 0x50 && b[1] === 0x4b;
   }
 
+  /* Reconstrói as linhas do PDF a partir dos tokens posicionados.
+     ==========================================================================
+     Duas armadilhas do PDF.js, as mesmas que quebravam a leitura do boletim:
+
+     1. AGRUPAR POR y EXATO NÃO FUNCIONA. Tokens da mesma linha visual variam
+        frações no y; arredondando, 610,4 e 610,6 caem em linhas diferentes e a
+        linha se parte no meio. Por isso a tolerância.
+
+     2. JUNTAR SEMPRE COM ESPAÇO ESTRAGA PALAVRA ACENTUADA. O PDF.js devolve
+        acento e ligadura em token próprio ("Matem"|"á"|"tica"), e o espaço no
+        meio produzia "Matem á tica" — que o CalParse não reconhece como
+        matéria, porque ele casa o nome por prefixo exato. Resultado: quase toda
+        matéria do comunicado (Matemática, Física, Química, História, Língua…)
+        deixava de ancorar, e o rascunho vinha vazio ou pela metade.
+        Quem decide o espaço é o vão medido entre um token e o próximo: pedaço
+        da mesma palavra encosta (vão ~0) e palavra separada tem vão de verdade.
+     ========================================================================== */
+  var TOL_LINHA = 3.5, VAO_ESPACO = 1;
+  function montaLinhas(toks) {
+    var t = toks.slice().sort(function (a, b) { return (b.y - a.y) || (a.x - b.x); });
+    var linhas = [];
+    t.forEach(function (tk) {
+      var u = linhas[linhas.length - 1];
+      if (u && Math.abs(tk.y - u.y) <= TOL_LINHA) u.toks.push(tk);
+      else linhas.push({ y: tk.y, toks: [tk] });
+    });
+    return linhas.map(function (l) {
+      var ord = l.toks.sort(function (a, b) { return a.x - b.x; });
+      var s = "";
+      ord.forEach(function (tk, i) {
+        if (i) {
+          var ant = ord[i - 1];
+          var vao = tk.x - (ant.x + (ant.w || 0));
+          if (!(ant.w > 0) || vao >= VAO_ESPACO) s += " ";
+        }
+        s += tk.s;
+      });
+      return s.trim();
+    }).filter(Boolean);
+  }
+
   // Lê o PDF no próprio navegador (PDF.js) e reconstrói as linhas pela posição do texto.
   function pdfToText(buf) {
     if (!window.pdfjsLib) return Promise.reject(new Error("Leitor de PDF ainda carregando — tente de novo em 1 segundo."));
@@ -331,16 +372,12 @@
       return pages.reduce(function (chain, p) {
         return chain.then(function (acc) {
           return pdf.getPage(p).then(function (page) { return page.getTextContent(); }).then(function (tc) {
-            var lines = {};
+            var toks = [];
             tc.items.forEach(function (it) {
               if (!it.str || !it.str.trim()) return;
-              var y = Math.round(it.transform[5]);
-              (lines[y] = lines[y] || []).push({ x: it.transform[4], s: it.str });
+              toks.push({ x: it.transform[4], y: it.transform[5], w: it.width || 0, s: it.str });
             });
-            Object.keys(lines).map(Number).sort(function (a, b) { return b - a; }).forEach(function (y) {
-              var line = lines[y].sort(function (a, b) { return a.x - b.x; }).map(function (o) { return o.s; }).join(" ");
-              acc.push(line);
-            });
+            montaLinhas(toks).forEach(function (l) { acc.push(l); });
             return acc;
           });
         });
