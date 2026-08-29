@@ -3,7 +3,7 @@
      quando tem internet; cai pro cache se estiver offline).
    - Ícones/manifest e o SDK do Firebase (gstatic): cache-first (são estáveis).
    - NÃO intercepta chamadas do Firestore/Auth (googleapis) — o SDK cuida do offline. */
-const CACHE = "painel-lab-v19";
+const CACHE = "painel-lab-v20";
 const SHELL = [
   "./",
   "./index.html",
@@ -77,7 +77,15 @@ self.addEventListener("fetch", (e) => {
   const isVendor = url.pathname.startsWith("/app/vendor/");
   const isAppCode = sameOrigin && !isVendor && (req.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname.startsWith("/app/"));
   if (isAppCode) {
-    e.respondWith(fetch(req).then((res) => putCache(req, res)).catch(() => caches.match(req)));
+    // cache:"reload" pula o cache HTTP do navegador. Sem isso o network-first
+    // era só aparência: o fetch daqui era servido pelo próprio cache do
+    // navegador (max-age das regras de hosting) e devolvia o arquivo velho,
+    // então um deploy demorava até a validade expirar pra chegar no aluno.
+    e.respondWith(
+      fetch(req, { cache: "reload" })
+        .then((res) => putCache(req, res))
+        .catch(() => fetch(req).catch(() => caches.match(req)))
+    );
     return;
   }
 
