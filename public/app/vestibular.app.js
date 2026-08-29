@@ -574,8 +574,19 @@
       + '<div id="vest-exercicios">' + exerciciosHTML() + '</div>'
       + pomodoroHTML();
   }
+  /* Responder o ENEM na plataforma. Fica ANTES do corretor manual porque é o
+     caminho melhor: o corretor manual exige que o aluno já tenha conferido as
+     respostas por fora — aqui ele só marca o que assinalou. */
+  function enemCartaoHTML() {
+    if (!window.Gabaritos || !Gabaritos.temPara("ENEM")) return "";
+    var eds = Gabaritos.edicoes("ENEM");
+    return '<div class="box"><h2>📝 Responder o ENEM na plataforma</h2>'
+      + '<div class="hint">Abra a prova no PDF (logo abaixo), marque aqui o que você assinalou e o sistema corrige pelo gabarito oficial do INEP — já separando seus acertos por área. '
+      + 'Disponível: ' + eds.map(function (e) { return esc(String(e.ano)); }).join(", ") + '.</div>'
+      + '<button class="btn cyan" id="enem-cartao">📝 Abrir cartão-resposta</button></div>';
+  }
   function enemPanelHTML() {
-    return '<div id="vest-resumo">' + resumoHTML() + '</div>' + corretorHTML()
+    return '<div id="vest-resumo">' + resumoHTML() + '</div>' + enemCartaoHTML() + corretorHTML()
       + '<div class="box"><h2>📖 Conteúdo frequente</h2><div class="hint">Escolha a matéria e veja os temas que mais caem no ENEM.</div>' + cfMateriaHTML("ENEM", "enem") + '</div>'
       + enemProvasHTML() + '<div id="vest-hist">' + histHTML() + '</div>';
   }
@@ -583,7 +594,11 @@
     return '<div id="vest-desemp">' + vestDesempenhoHTML() + '</div>' + outrosConteudoFreqHTML() + outrosProvasHTML();
   }
   function wireRegistro() { wireFoco(); wireBadges(); wireMetas(); wireHeatmap(); wireExercicios(); wirePomodoro(); }
-  function wireEnem() { wireCorretor(); wireCfMateria("ENEM", "enem"); wireEnemProvas(); updateStats(); }
+  function wireEnem() {
+    var cart = document.getElementById("enem-cartao");
+    if (cart) cart.onclick = function () { openCartao("ENEM"); };
+    wireCorretor(); wireCfMateria("ENEM", "enem"); wireEnemProvas(); updateStats();
+  }
   function wireVestibulares() { wireDesempenho(); wireOutrosConteudoFreq(); wireOutrosProvas(); }
 
   /* ---------------- conteúdo frequente por matéria (com % de incidência) ----------------
@@ -1227,6 +1242,8 @@
     + '.cr-row.certa .cr-o.on{background:#2fa64a;border-color:#2fa64a;color:#fff}'
     + '.cr-row.errada .cr-o.on{background:#ff5b6e;border-color:#ff5b6e;color:#fff}'
     + '.cr-row.errada .cr-o.gab{border-color:#2fa64a;color:#2fa64a}'
+    + '.cr-row.anulada .cr-n{color:var(--gold);font-weight:800}'
+    + '.cr-row.anulada .cr-o{border-color:var(--gold);opacity:.55}'
     + '.cr-resumo{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0}'
     + '.cr-card{flex:1;min-width:90px;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}'
     + '.cr-card b{display:block;font-size:1.5rem;line-height:1.1}'
@@ -1234,10 +1251,13 @@
     + '</style>';
 
   function crGridHTML(ed) {
+    // quantas alternativas vêm da edição: a 1ª fase da UNICAMP tem 4 (A–D), e
+    // desenhar um "E" ali seria oferecer uma opção que não existia na prova
+    var alts = Gabaritos.alternativasDe(ed);
     var linhas = "";
     for (var i = 0; i < ed.total; i++) {
       linhas += '<div class="cr-row" data-row="' + i + '"><span class="cr-n">' + (i + 1) + '</span>'
-        + ["A", "B", "C", "D", "E"].map(function (L) {
+        + alts.map(function (L) {
             return '<button class="cr-o" data-q="' + i + '" data-a="' + L + '">' + L + '</button>';
           }).join("")
         + '</div>';
@@ -1246,7 +1266,9 @@
   }
   function crVersoesHTML(ed) {
     return '<option value="">— escolha a versão —</option>'
-      + Gabaritos.versoesDe(ed).map(function (v) { return '<option value="' + v + '">Prova ' + v + '</option>'; }).join("");
+      + Gabaritos.versoesDe(ed).map(function (v) {
+          return '<option value="' + esc(v) + '">' + esc(Gabaritos.rotuloDe(ed, v)) + '</option>';
+        }).join("");
   }
   function crProgHTML(ed, n) {
     return (n || 0) + " de " + ed.total + " respondidas · deixar em branco vale como erro";
@@ -1328,12 +1350,16 @@
     // pinta o cartão: verde no acerto, vermelho no erro + contorno no gabarito
     r.detalhe.forEach(function (d, i) {
       var row = document.querySelector('.cr-row[data-row="' + i + '"]'); if (!row) return;
-      row.classList.remove("certa", "errada");
+      row.classList.remove("certa", "errada", "anulada");
+      if (d.anulada) { row.classList.add("anulada"); return; } // ponto de todos
       if (!d.marcada) return;
       row.classList.add(d.ok ? "certa" : "errada");
       if (!d.ok) {
-        var g = row.querySelector('.cr-o[data-a="' + d.certa + '"]');
-        if (g) g.classList.add("gab");
+        // gabarito duplo: contorna todas as alternativas que a banca aceitou
+        (d.aceitas || d.certa).split("").forEach(function (L) {
+          var g = row.querySelector('.cr-o[data-a="' + L + '"]');
+          if (g) g.classList.add("gab");
+        });
       }
     });
 
@@ -1345,8 +1371,9 @@
       + '<div class="cr-card"><b>' + r.brancos + '</b><span>em branco</span></div>'
       + '<div class="cr-card"><b style="color:var(--cyan)">' + pctAc + '%</b><span>de ' + r.total + '</span></div>'
       + '</div>'
-      + '<div class="hint">Corrigido pelo gabarito oficial da <b>Prova ' + versao + '</b> · '
+      + '<div class="hint">Corrigido pelo gabarito oficial de <b>' + esc(Gabaritos.rotuloDe(cr.ed, versao)) + '</b> · '
       + 'conferido em ' + esc(cr.ed.conferido) + '. Verde = acertou · vermelho = errou, com o gabarito contornado.'
+      + (r.anuladas ? '<br>' + r.anuladas + ' questão(ões) anulada(s) pela banca — o ponto vale pra todo mundo, então contam como acerto.' : '')
       + (cr.ed.assuntos ? '' : '<br>O diagnóstico por assunto ainda não está disponível para esta edição.')
       + '</div>';
 
@@ -1360,9 +1387,36 @@
 
   function salvarCartao() {
     var cr = window._cr; if (!cr || !cr.resultado) return;
+    var data = val("cr-data") || todayISO();
+
+    /* O ENEM não mora em state.provas: ele tem linha de evolução própria, por
+       área (state.registros). E como o cartão sabe questão a questão, dá pra
+       preencher as 4 áreas sozinho — o registro manual de acertos não tem essa
+       informação, então quem responde aqui ganha o diagnóstico de brinde. */
+    if (cr.inst === "ENEM") {
+      var ac = {};
+      AREAS.forEach(function (a) {
+        var c = 0;
+        cr.resultado.detalhe.forEach(function (d) {
+          if (d.q >= a.ini && d.q <= a.fim && d.ok) c++;
+        });
+        ac[a.k] = c;
+      });
+      state.registros.push({
+        id: "r-" + Date.now(), vest: "ENEM", ano: String(cr.ed.ano),
+        data: data, ac: ac, total: cr.resultado.acertos
+      });
+      save(); markAtividade();
+      var novosEnem = checkBadges();
+      closeModal();
+      refreshDynamic(); refreshBadges();
+      avisaConquistas(novosEnem);
+      return;
+    }
+
     state.provas.push({
       id: "prova-" + Date.now(), instituicao: cr.inst, tipo: "passado",
-      nome: cr.ed.nome + " · " + cr.versao, data: val("cr-data") || todayISO(),
+      nome: cr.ed.nome + " · " + Gabaritos.rotuloDe(cr.ed, cr.versao), data: data,
       acertos: cr.resultado.acertos, total: cr.resultado.total
     });
     save(); markAtividade();
