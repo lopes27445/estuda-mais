@@ -39,6 +39,57 @@
     return linhas;
   }
 
+  /* O pdf.js só separa em tokens diferentes o que o PDF escreveu em operações
+     de texto diferentes. No boletim do COC a faixa de rótulos sai como UMA
+     corrida só ("AV2 PC AVE MED F MED F MED F"), e aí nenhum rótulo casava
+     sozinho no filtro abaixo — o cabeçalho inteiro era descartado e a leitura
+     morria em "não reconheci o formato deste PDF".
+
+     Reconstruímos a posição de cada rótulo dentro da corrida: o deslocamento do
+     caractere dividido pelo comprimento total, vezes a largura do token (que o
+     pdf.js informa em `width`, repassada aqui como `w`). Vale porque a corrida
+     inteira está numa fonte e num corpo só, então o avanço é uniforme.
+     Medido no boletim real: erro < 1,2pt, contra TOL_COLUNA = 14. */
+  function expandeTokens(tokens) {
+    var out = [];
+    tokens.forEach(function (tk) {
+      var s = String(tk.t == null ? "" : tk.t);
+      if (!tk.w || !/\s/.test(s.trim())) { out.push(tk); return; }
+      var re = /\S+/g, m;
+      while ((m = re.exec(s)) !== null) {
+        out.push({
+          x: tk.x + (m.index / s.length) * tk.w,
+          y: tk.y,
+          t: m[0],
+          w: (m[0].length / s.length) * tk.w
+        });
+      }
+    });
+    return out;
+  }
+
+  /* Junta os pedaços de uma linha em texto.
+     Não dá pra juntar com espaço sempre: o pdf.js quebra acento e ligadura em
+     tokens próprios ("F"|"í"|"sica"), e um espaço no meio viraria "F í sica" —
+     que além de feio faz o nome não casar com a matéria do painel. Também não dá
+     pra juntar sempre colado, senão "Língua Inglesa" vira uma palavra só.
+     Quem decide é o espaço em branco medido entre um token e o próximo: no
+     boletim real, pedaço da mesma palavra dá gap 0,00 e separação de palavra dá
+     gap ≥ 1,99 — daí o corte em 1. */
+  function juntaTokens(toks) {
+    var ordenados = toks.slice().sort(function (a, b) { return a.x - b.x; });
+    var s = "";
+    ordenados.forEach(function (tk, i) {
+      if (i) {
+        var ant = ordenados[i - 1];
+        var gap = tk.x - (ant.x + (ant.w || 0));
+        if (!(ant.w > 0) || gap >= 1) s += " ";
+      }
+      s += tk.t;
+    });
+    return s.trim();
+  }
+
   /* A linha de cabeçalho dá as âncoras. Os rótulos se repetem por bimestre, e
      é a ordem que diz a qual bloco cada um pertence. */
   function lerCabecalho(linhas) {
@@ -82,7 +133,9 @@
   function ehNota(v) { return /^(\d{1,2}([.,]\d)?|DISP)$/i.test(String(v || "").trim()); }
 
   function parseTokens(tokens) {
-    var linhas = agrupaLinhas(tokens);
+    // uma corrida de texto do PDF pode trazer vários campos ("AV2 PC AVE …",
+    // "DISP 4,7"); quebra antes de tudo pra cada um virar sua própria coluna
+    var linhas = agrupaLinhas(expandeTokens(tokens));
     var cab = lerCabecalho(linhas);
     if (!cab) throw new Error("Não reconheci o formato deste PDF — a tabela de notas não foi encontrada.");
 
@@ -91,8 +144,7 @@
 
     for (var i = cab.linha + 1; i < linhas.length; i++) {
       var toks = linhas[i].tokens;
-      var nome = toks.filter(function (tk) { return tk.x < cab.xTabela - 2; })
-                     .map(function (tk) { return tk.t; }).join(" ").trim();
+      var nome = juntaTokens(toks.filter(function (tk) { return tk.x < cab.xTabela - 2; }));
       if (!nome || nome.length > 60) continue;
       if (/^(Assinatura|Observa|Legenda|Activesoft|Esta )/i.test(nome)) continue;
 
@@ -132,7 +184,7 @@
 
   function lerIdentificacao(linhas, ateLinha) {
     var txt = linhas.slice(0, ateLinha).map(function (l) {
-      return l.tokens.map(function (tk) { return tk.t; }).join(" ");
+      return juntaTokens(l.tokens);
     }).join("\n");
     var out = { aluno: "", matricula: "", serie: "", turma: "", ano: "", emissao: "" };
     var m;
@@ -159,7 +211,7 @@
        falam de SÉRIE, pra "3º" seguido de "B B B" no cabeçalho da tabela não
        virar turma. */
     var comSerie = linhas.slice(0, ateLinha).map(function (l) {
-      return l.tokens.map(function (tk) { return tk.t; }).join(" ");
+      return juntaTokens(l.tokens);
     }).filter(function (l) { return /S[ÉE]RIE/i.test(l); });
 
     var naoLetra = "(?![A-Za-zÀ-ÿ])";

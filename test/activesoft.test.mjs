@@ -173,6 +173,104 @@ describe("Activesoft · mapeamento para o painel", () => {
   });
 });
 
+/* Como o pdf.js REALMENTE entrega este boletim — e que a fixture acima não
+   reproduzia, por criar um token por rótulo.
+
+   O pdf.js só separa o que o PDF escreveu em operações de texto distintas. No
+   boletim do COC:
+     1. a faixa de rótulos sai como UMA corrida ("AV2 PC AVE MED F MED F MED F"),
+        então nenhum rótulo casava sozinho e o cabeçalho inteiro era descartado
+        — a importação morria em "não reconheci o formato deste PDF";
+     2. acento e ligadura viram tokens próprios ("F"|"í"|"sica"), e juntar com
+        espaço produzia "F í sica", que não casa com a matéria do painel;
+     3. campos vizinhos podem vir grudados ("DISP 4,7"), custando a coluna PC.
+
+   As posições e larguras abaixo são as medidas no boletim real; os nomes e as
+   notas continuam inventados, que é a regra deste arquivo. */
+describe("Activesoft · geometria real do pdf.js", () => {
+  const X0 = 102.6, PASSO = 155.5;
+  const yCab = 100;
+
+  function tokensReais(nomeFrags, valores) {
+    const t = [];
+    t.push({ x: 33, y: 40, t: "Aluno(a):", w: 33.1 });
+    t.push({ x: 70.1, y: 40, t: "Fulano de Tal", w: 87.5 });
+    // acento em token próprio, colado (gap 0) — como o pdf.js entrega
+    t.push({ x: 33, y: 52, t: "Matr", w: 16.9 });
+    t.push({ x: 49.9, y: 52, t: "í", w: 2.2 });
+    t.push({ x: 52.1, y: 52, t: "cula:", w: 17.3 });
+    t.push({ x: 73.4, y: 52, t: "00009999", w: 36.0 });
+    t.push({ x: 28.5, y: 64, t: "ENSINO M", w: 37.6 });
+    t.push({ x: 66.1, y: 64, t: "É", w: 4.5 });
+    t.push({ x: 70.6, y: 64, t: "DIO / 2ª", w: 28.1 });
+    t.push({ x: 100.7, y: 64, t: "S", w: 4.9 });
+    t.push({ x: 105.6, y: 64, t: "É", w: 4.5 });
+    t.push({ x: 110.1, y: 64, t: "RIE / 2026 / 2° S", w: 58.8 });
+    t.push({ x: 168.9, y: 64, t: "É", w: 4.5 });
+    t.push({ x: 173.4, y: 64, t: "RIE C", w: 20.0 });
+    // cabeçalho: AV1 solto + o resto do bloco numa corrida só
+    for (let b = 0; b < 3; b++) {
+      t.push({ x: X0 + b * PASSO, y: yCab, t: "AV1", w: 14.5 });
+      t.push({ x: X0 + b * PASSO + 19, y: yCab, t: "AV2 PC AVE MED F MED F MED F", w: 131.2 });
+    }
+    // linha da disciplina
+    let y = yCab + 20;
+    nomeFrags.forEach((f) => t.push({ x: f.x, y: y, t: f.t, w: f.w }));
+    valores.forEach((v) => t.push({ x: v.x, y: y, t: v.t, w: v.w }));
+    return t;
+  }
+
+  it("lê o cabeçalho mesmo com os rótulos numa corrida só", () => {
+    const lido = A.parseTokens(tokensReais(
+      [{ x: 36.5, t: "Geogra", w: 22.0 }, { x: 58.5, t: "fi", w: 4.0 }, { x: 62.5, t: "a", w: 5.0 }],
+      [{ x: X0, t: "10,0", w: 10.6 }, { x: X0 + 19, t: "6,5", w: 10.6 },
+       { x: X0 + 38, t: "6,0", w: 10.6 }, { x: X0 + 52, t: "2,0", w: 10.6 }]
+    ));
+    assert.equal(lido.disciplinas.length, 1);
+    const g = lido.disciplinas[0].bimestres[0];
+    assert.deepEqual([g.av1, g.av2, g.pc, g.ave], ["10,0", "6,5", "6,0", "2,0"]);
+  });
+
+  it("remonta o nome com acento e ligadura, sem espaço no meio", () => {
+    const lido = A.parseTokens(tokensReais(
+      [{ x: 36.5, t: "Geogra", w: 22.0 }, { x: 58.5, t: "fi", w: 4.0 }, { x: 62.5, t: "a", w: 5.0 }],
+      [{ x: X0, t: "10,0", w: 10.6 }, { x: X0 + 19, t: "6,5", w: 10.6 }]
+    ));
+    assert.equal(lido.disciplinas[0].nome, "Geografia");
+  });
+
+  it("preserva o espaço real entre palavras do nome", () => {
+    const lido = A.parseTokens(tokensReais(
+      [{ x: 36.5, t: "L", w: 4.4 }, { x: 40.9, t: "í", w: 2.0 }, { x: 42.9, t: "ngua", w: 16.0 },
+       { x: 62.9, t: "Inglesa", w: 25.0 }],
+      [{ x: X0, t: "8,0", w: 10.6 }, { x: X0 + 19, t: "6,5", w: 10.6 }]
+    ));
+    assert.equal(lido.disciplinas[0].nome, "Língua Inglesa");
+  });
+
+  it('separa campos grudados ("DISP 4,7") em AV2 e PC', () => {
+    const lido = A.parseTokens(tokensReais(
+      [{ x: 36.5, t: "Geogra", w: 22.0 }, { x: 58.5, t: "fi", w: 4.0 }, { x: 62.5, t: "a", w: 5.0 }],
+      [{ x: X0, t: "8,0", w: 10.6 }, { x: X0 + 19, t: "DISP 4,7", w: 30.4 },
+       { x: X0 + 52, t: "2,0", w: 10.6 }]
+    ));
+    const g = lido.disciplinas[0].bimestres[0];
+    assert.equal(g.av2, "DISP");
+    assert.equal(g.pc, "4,7");
+  });
+
+  it("lê matrícula, série e turma com o acento em token separado", () => {
+    const lido = A.parseTokens(tokensReais(
+      [{ x: 36.5, t: "Geogra", w: 22.0 }, { x: 58.5, t: "fi", w: 4.0 }, { x: 62.5, t: "a", w: 5.0 }],
+      [{ x: X0, t: "8,0", w: 10.6 }, { x: X0 + 19, t: "6,5", w: 10.6 }]
+    ));
+    assert.equal(lido.info.matricula, "00009999");
+    assert.equal(lido.info.serie, "2");
+    assert.equal(lido.info.turma, "C");
+    assert.equal(lido.info.ano, "2026");
+  });
+});
+
 /* A regra do DISP vive em notas.app.js, que é script de navegador e não pode
    ser importado inteiro aqui. As funções de cálculo são puras, então são
    extraídas do próprio arquivo publicado — assim o teste valida o código que

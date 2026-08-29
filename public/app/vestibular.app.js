@@ -1068,7 +1068,12 @@
         + '<h3 style="margin:16px 0 4px">📈 Evolução · ' + esc(cfg.sigla) + '</h3>'
         + filtro
         + vestProvaChartSVG(inst)
-        + '<div class="toolbar" style="margin-top:14px"><h2>Registros de ' + esc(cfg.sigla) + ' (' + provasDe(inst).length + ')</h2><button class="btn green small" id="vd-novo">＋ Novo registro</button></div>'
+        + '<div class="toolbar" style="margin-top:14px"><h2>Registros de ' + esc(cfg.sigla) + ' (' + provasDe(inst).length + ')</h2>'
+        // o cartão-resposta também aqui: antes ele só existia na aba própria da
+        // faculdade-alvo, então quem não escolheu Foco nunca via que dava pra responder
+        + (window.Gabaritos && Gabaritos.temPara(inst)
+            ? '<button class="btn cyan small" id="vd-cartao">📝 Responder na plataforma</button>' : '')
+        + '<button class="btn green small" id="vd-novo">＋ Novo registro</button></div>'
         + (list || '<div class="empty">Nenhum registro ainda.</div>');
     }
     return '<div class="box">'
@@ -1084,6 +1089,8 @@
       b.onclick = function () { window._vestInst = b.getAttribute("data-inst"); window._vestMat = null; refreshDesemp(); };
     });
     var novo = document.getElementById("vd-novo"); if (novo) novo.onclick = openProvaForm;
+    var cart = document.getElementById("vd-cartao");
+    if (cart) cart.onclick = function () { openCartao(window._vestInst); };
     var matf = document.getElementById("vd-matfiltro"); if (matf) matf.onchange = function () { window._vestMat = matf.value; refreshDesemp(); };
     Array.prototype.forEach.call(root.querySelectorAll("[data-rm]"), function (b) {
       b.onclick = function () { rmProva(b.getAttribute("data-rm")); };
@@ -1226,12 +1233,7 @@
     + '.cr-card span{font-size:.72rem;color:var(--mut)}'
     + '</style>';
 
-  function openCartao(inst) {
-    var eds = window.Gabaritos ? Gabaritos.edicoes(inst) : [];
-    if (!eds.length) { alert("Ainda não tenho o gabarito oficial desta prova cadastrado."); return; }
-    window._cr = { inst: inst, ed: eds[0], respostas: [] };
-    var ed = window._cr.ed;
-
+  function crGridHTML(ed) {
     var linhas = "";
     for (var i = 0; i < ed.total; i++) {
       linhas += '<div class="cr-row" data-row="' + i + '"><span class="cr-n">' + (i + 1) + '</span>'
@@ -1240,29 +1242,64 @@
           }).join("")
         + '</div>';
     }
+    return linhas;
+  }
+  function crVersoesHTML(ed) {
+    return '<option value="">— escolha a versão —</option>'
+      + Gabaritos.versoesDe(ed).map(function (v) { return '<option value="' + v + '">Prova ' + v + '</option>'; }).join("");
+  }
+  function crProgHTML(ed, n) {
+    return (n || 0) + " de " + ed.total + " respondidas · deixar em branco vale como erro";
+  }
+  /* Volta os botões do rodapé pro estado "ainda não corrigi" — usado ao abrir e ao
+     trocar de edição (depois de corrigir, o rodapé vira Fechar/Salvar). */
+  function crAcoesIniciais() {
+    var acoes = document.querySelector("#cr-overlay .modal-actions"); if (!acoes) return;
+    acoes.innerHTML = '<button class="btn ghost" id="cr-cancel">Cancelar</button>'
+      + '<button class="btn done" id="cr-go">Corrigir</button>';
+    document.getElementById("cr-cancel").onclick = closeModal;
+    document.getElementById("cr-go").onclick = corrigirCartao;
+  }
+
+  function openCartao(inst) {
+    var eds = window.Gabaritos ? Gabaritos.edicoes(inst) : [];
+    if (!eds.length) { alert("Ainda não tenho o gabarito oficial desta prova cadastrado."); return; }
+    window._cr = { inst: inst, ed: eds[0], respostas: [] };
+    var ed = window._cr.ed;
 
     document.getElementById("modal-root").innerHTML = CR_CSS
       + '<div class="overlay" id="cr-overlay"><div class="modal" style="max-width:620px">'
       + '<h3>📝 Responder na plataforma</h3>'
-      + '<div class="field"><label>Edição</label>'
+      + '<div class="field"><label>Edição (ano e fase)</label>'
       + '<select id="cr-ed">' + eds.map(function (e, i) {
           return '<option value="' + i + '">' + esc(e.nome) + '</option>'; }).join("") + '</select></div>'
       + '<div class="field"><label>Versão do seu caderno *</label>'
-      + '<select id="cr-ver"><option value="">— escolha a versão —</option>'
-      + Gabaritos.versoesDe(ed).map(function (v) { return '<option value="' + v + '">Prova ' + v + '</option>'; }).join("")
-      + '</select>'
+      + '<select id="cr-ver">' + crVersoesHTML(ed) + '</select>'
       + '<div class="hint" style="margin-top:6px">Está impressa na <b>capa do caderno</b>. '
       + 'A ordem das questões muda de uma versão pra outra — corrigir pela versão errada dá um resultado errado <b>sem avisar</b>.</div></div>'
       + '<div class="field"><label>Data em que você fez</label><input id="cr-data" type="date" value="' + todayISO() + '"></div>'
-      + '<div class="hint" id="cr-prog">0 de ' + ed.total + ' respondidas · deixar em branco vale como erro</div>'
-      + '<div class="cr-grid" id="cr-grid">' + linhas + '</div>'
-      + '<div class="modal-actions"><button class="btn ghost" id="cr-cancel">Cancelar</button>'
-      + '<button class="btn done" id="cr-go">Corrigir</button></div>'
+      + '<div class="hint" id="cr-prog">' + crProgHTML(ed, 0) + '</div>'
+      + '<div class="cr-grid" id="cr-grid">' + crGridHTML(ed) + '</div>'
+      + '<div class="modal-actions"></div>'
       + '</div></div>';
 
     document.getElementById("cr-overlay").onclick = function (e) { if (e.target === this) closeModal(); };
-    document.getElementById("cr-cancel").onclick = closeModal;
-    document.getElementById("cr-go").onclick = corrigirCartao;
+    crAcoesIniciais();
+    /* Trocar a edição troca a prova inteira: número de questões, versões e gabarito.
+       Sem isto o seletor existia mas não fazia nada — o cartão continuava o da
+       primeira edição da lista e a correção saía pelo gabarito errado. */
+    document.getElementById("cr-ed").onchange = function () {
+      var nova = eds[parseInt(this.value, 10)]; if (!nova) return;
+      window._cr.ed = nova;
+      window._cr.respostas = [];
+      window._cr.resultado = null;
+      window._cr.versao = null;
+      document.getElementById("cr-ver").innerHTML = crVersoesHTML(nova);
+      var g = document.getElementById("cr-grid");
+      g.innerHTML = crGridHTML(nova); g.scrollTop = 0;
+      document.getElementById("cr-prog").innerHTML = crProgHTML(nova, 0);
+      crAcoesIniciais();
+    };
     document.getElementById("cr-grid").onclick = function (e) {
       var b = e.target.closest ? e.target.closest(".cr-o") : null; if (!b) return;
       var q = +b.getAttribute("data-q"), a = b.getAttribute("data-a");
@@ -1273,8 +1310,7 @@
         o.classList.toggle("on", o.getAttribute("data-a") === window._cr.respostas[q]);
       });
       var n = window._cr.respostas.filter(function (x) { return !!x; }).length;
-      document.getElementById("cr-prog").innerHTML = n + " de " + window._cr.ed.total
-        + " respondidas · deixar em branco vale como erro";
+      document.getElementById("cr-prog").innerHTML = crProgHTML(window._cr.ed, n);
     };
   }
 

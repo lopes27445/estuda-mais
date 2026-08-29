@@ -68,8 +68,11 @@ function importarBoletim(ev){
           pdf.getPage(n).then(p=>p.getTextContent()).then(tc=>{
             tc.items.forEach(it=>{
               if(!it.str||!it.str.trim()) return;
-              // transform[4]=x, [5]=y; y do PDF cresce pra cima, invertemos
-              acc.push({x:it.transform[4], y:-it.transform[5], t:it.str.trim()});
+              // transform[4]=x, [5]=y; y do PDF cresce pra cima, invertemos.
+              // w = largura do token: o cabeçalho do boletim vem como uma corrida
+              // de texto só ("AV2 PC AVE ..."), e é a largura que deixa o parser
+              // recuperar a posição de cada rótulo dentro dela.
+              acc.push({x:it.transform[4], y:-it.transform[5], t:it.str.trim(), w:it.width});
             });
             return acc;
           })
