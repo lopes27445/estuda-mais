@@ -77,6 +77,15 @@ const PC = [
 /* ============================ ESTADO ============================ */
 const KEY="painel-estudos-3em-3bim-2026";
 const KEY_PREV="painel-estudos-3em-2bim-2026"; // bimestre anterior — só p/ herdar o histórico
+/* Estes dois limites precisam ficar ACIMA do `load()` abaixo.
+   `load()` roda aqui no topo e chama `normalize()`, que os lê. Declarados com
+   `const` mais pra baixo no arquivo (era assim), eles ainda estão na zona morta
+   temporal quando `normalize` executa, e o script inteiro aborta com
+   "Cannot access 'LIM_LISTA' before initialization" — antes de definir `state`
+   e `view`. As funções continuam existindo (declaração de função sobe), então
+   os onclick do HTML acham `setView`, mas ela morre ao tocar em `view`: o
+   painel fica com todos os botões mortos e o conteúdo nunca renderiza. */
+const LIM_TXT=500, LIM_LISTA=500;
 let state = load();
 let view="provas", showDone=false;
 const ui={open:{}, openNotes:{}, openMural:{}};
@@ -102,8 +111,8 @@ function load(){
    aceito como veio e ia direto pro DOM. Um arquivo preparado conseguia colocar
    aspas dentro de value="…" e ids arbitrários dentro de onclick="f('…')".
    Como `normalize` também roda no load(), isto protege igualmente contra
-   localStorage adulterado, não só contra arquivo importado. */
-const LIM_TXT=500, LIM_LISTA=500;
+   localStorage adulterado, não só contra arquivo importado.
+   (LIM_TXT e LIM_LISTA ficam lá em cima, antes do load — ver comentário lá.) */
 function _txt(v,lim){ return String(v==null?"":v).slice(0,lim||LIM_TXT); }
 function _num(v,def,min,max){ const n=Number(v); if(!isFinite(n)) return def; return Math.min(max,Math.max(min,n)); }
 function _lista(v){ return Array.isArray(v)?v.slice(0,LIM_LISTA):[]; }
@@ -119,7 +128,13 @@ function saneiaItemEstado(o){
 }
 function saneiaCustom(it){
   it=(it&&typeof it==="object")?it:{};
+  // `kind` diz se o item é prova ou produção, e allItems() filtra por ele.
+  // Sem preservar aqui, todo item criado pelo aluno sumia das duas listas no
+  // primeiro reload — o saneamento rodava, devolvia o objeto sem `kind`, e o
+  // filtro `c.kind===v` deixava de casar. Lista fechada porque este valor entra
+  // em comparação de fluxo, não é texto livre.
   return { id:safeId(it.id)||("u-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)),
+    kind:(it.kind==="pc"?"pc":"provas"),
     tipo:_txt(it.tipo,20), disc:_txt(it.disc,120), data:_txt(it.data,20), prof:_txt(it.prof,120),
     area:_txt(it.area,40), mod:_txt(it.mod,60), desc:_txt(it.desc,1000), note:_txt(it.note,1000),
     topics:_lista(it.topics).map(t=>_txt(t,300)) };
@@ -203,8 +218,16 @@ function loadSerieContent(done){
      var pc=daVersaoAtiva(res[1],"pc");
      if(pv.length||pc.length){ window._RPROVAS=pv; window._RPC=pc; }
      window._REGRAS = res[2].exists ? res[2].data() : null;
-     done();
-   }).catch(function(){ done(); });
+   })
+   // offline, ou professor sem permissão de leitura nesta série: segue com o
+   // que já tiver em mãos em vez de deixar a tela sem render
+   .catch(function(){})
+   /* done() fica FORA da cadeia acima de propósito. Estando dentro do .then,
+      um erro dentro do próprio done() (ele chama render()) caía no .catch, que
+      chamava done() de novo — render lançava outra vez, agora como rejeição não
+      tratada, e a tela ficava em branco sem nada no console apontando a causa.
+      Aqui ele roda uma vez só, e um erro dele sobe de verdade. */
+   .then(function(){ done(); });
 }
 function allItems(v){
   const hid=new Set(state.hidden);
