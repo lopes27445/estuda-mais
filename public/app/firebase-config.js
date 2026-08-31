@@ -12,8 +12,23 @@
    E no app instalado na tela de início do iPhone o popup nem abre, então
    o login com Google ficava impossível lá. Todo site do Firebase Hosting
    já serve /__/auth/* sozinho, então usar o hostname atual resolve.
-   IMPORTANTE: cada domínio precisa estar em Authentication → Settings →
-   Authorized domains no console do Firebase. */
+
+   IMPORTANTE — cada domínio novo precisa ser registrado em DOIS lugares
+   diferentes, em consoles diferentes. Só um não basta:
+
+   1. Firebase Console → Authentication → Settings → Authorized domains
+      Adicionar o domínio. Se faltar, o erro é `auth/unauthorized-domain`.
+
+   2. Google Cloud Console → APIs e serviços → Credenciais → cliente OAuth 2.0
+      Adicionar `https://<domínio>/__/auth/handler` em "URIs de redirecionamento
+      autorizados", e `https://<domínio>` em "Origens JavaScript autorizadas".
+      Se faltar, o erro é `Erro 400: redirect_uri_mismatch`.
+
+   O Firebase registra automaticamente só o domínio PADRÃO do projeto. Site
+   secundário de Hosting (o beta, por exemplo) NÃO entra sozinho na lista 2 —
+   e foi exatamente isso que quebrou o login com Google no beta em 26/08/2026,
+   quando este arquivo (com o authDomain dinâmico) chegou lá. Antes disso o beta
+   usava o domínio padrão, que já estava registrado, e por isso funcionava. */
 (function () {
   var padrao = "painel-e5373.firebaseapp.com";
   var h = (typeof location !== "undefined" && location.hostname) || "";

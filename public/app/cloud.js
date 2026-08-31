@@ -295,9 +295,24 @@
       } else { showLoginError(err); }
     });
   }
+  /* Falha de configuração do login com Google não é culpa de quem está tentando
+     entrar, e o erro cru ("Erro 400: redirect_uri_mismatch") não diz nada a um
+     aluno. Pior: ele não sabe que dá pra entrar por e-mail e senha, então
+     simplesmente desiste e ninguém fica sabendo que o login está quebrado.
+     Estes dois casos vêm de domínio não registrado no console — ver o comentário
+     em firebase-config.js sobre as DUAS listas que precisam ter o domínio. */
   function showLoginError(err) {
     gateBusy(false);
-    gateErr("Não consegui entrar: " + (err && (err.message || err.code) || "erro desconhecido"));
+    var c = err && err.code || "";
+    var cru = (err && (err.message || err.code)) || "erro desconhecido";
+    if (c === "auth/unauthorized-domain" || /redirect_uri_mismatch/i.test(cru)) {
+      gateErr("O login com Google não está liberado neste endereço. "
+        + "Entre com e-mail e senha aqui embaixo — funciona normalmente. "
+        + "(Se você é o responsável pelo sistema: falta registrar "
+        + location.hostname + " no console.)");
+      return;
+    }
+    gateErr("Não consegui entrar: " + cru);
   }
 
   /* ---- Login por e-mail e senha (funciona em qualquer aparelho, inclusive iPhone) ---- */
