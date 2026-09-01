@@ -24,16 +24,29 @@
       autorizados", e `https://<domínio>` em "Origens JavaScript autorizadas".
       Se faltar, o erro é `Erro 400: redirect_uri_mismatch`.
 
-   O Firebase registra automaticamente só o domínio PADRÃO do projeto. Site
-   secundário de Hosting (o beta, por exemplo) NÃO entra sozinho na lista 2 —
-   e foi exatamente isso que quebrou o login com Google no beta em 26/08/2026,
-   quando este arquivo (com o authDomain dinâmico) chegou lá. Antes disso o beta
-   usava o domínio padrão, que já estava registrado, e por isso funcionava. */
+   O Firebase registra sozinho só o domínio PADRÃO do projeto. Site secundário
+   de Hosting (o lab2) NÃO entra sozinho na lista 2 — foi isso que quebrou o
+   login no beta em 26/08/2026.
+
+   NÃO confie na memória sobre o que está registrado: as duas listas mudam por
+   fora do repositório. Rode `node tools/check-login-google.mjs`, que pergunta
+   ao próprio Google, domínio por domínio.
+
+   Estado medido em 31/08/2026 pela ferramenta acima:
+     painel-e5373-lab2.web.app    → OK nas duas listas
+     painel-e5373.web.app         → OK nas duas listas
+     painel-e5373.firebaseapp.com → está na lista 1, FALTA na lista 2
+   Ou seja: o domínio padrão do projeto saiu dos URIs de redirecionamento
+   (provável edição que substituiu em vez de somar, quando o lab2 foi
+   adicionado). Por isso o fallback abaixo aponta para painel-e5373.web.app,
+   e não mais para o .firebaseapp.com: um endereço fora do Hosting (localhost,
+   domínio próprio no futuro) cairia num handler que o Google recusa. */
 (function () {
-  var padrao = "painel-e5373.firebaseapp.com";
+  // fallback verificado como registrado nas DUAS listas — ver comentário acima
+  var padrao = "painel-e5373.web.app";
   var h = (typeof location !== "undefined" && location.hostname) || "";
-  // só confia em domínios do próprio Firebase Hosting; qualquer outro usa o padrão
-  var proprio = /\.web\.app$/.test(h) || /\.firebaseapp\.com$/.test(h);
+  // só confia em domínios de Hosting DESTE projeto; qualquer outro usa o padrão
+  var proprio = /^painel-e5373(-[a-z0-9-]+)?\.(web\.app|firebaseapp\.com)$/.test(h);
   window._authDomain = proprio ? h : padrao;
 })();
 window.firebaseConfig = {
