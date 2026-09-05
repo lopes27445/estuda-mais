@@ -49,6 +49,16 @@
   var proprio = /^painel-e5373(-[a-z0-9-]+)?\.(web\.app|firebaseapp\.com)$/.test(h);
   window._authDomain = proprio ? h : padrao;
 })();
+/* V-12 — App Check (chave do site do reCAPTCHA v3).
+   Vazia = App Check desligado, e o SDK dele nem é baixado.
+   Para ligar: criar o site em https://www.google.com/recaptcha/admin com os
+   domínios painel-e5373.web.app, painel-e5373-lab2.web.app e localhost,
+   registrar a chave SECRETA no console do Firebase (Criar e testar → App
+   Check) e colar aqui a chave do SITE — esta é pública, é o par da outra.
+   Depois disso, deixar em MONITORAMENTO por alguns dias antes do enforcement:
+   ligar os dois no mesmo dia bloqueia aparelho legítimo, inclusive o seu. */
+window.APPCHECK_SITE_KEY = "";
+
 window.firebaseConfig = {
   apiKey: "AIzaSyD-nMbBNsHCr2nBq5hJrGcUqarLh9xtJxg",
   authDomain: window._authDomain,

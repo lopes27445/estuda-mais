@@ -19,11 +19,11 @@
   html.light .hintbox{background:var(--surface);color:var(--txt)}
   html.light .rk.r3{color:var(--mut)}
   html.light .wrap>a[href="index.html"]{color:#5b6b82;background:#eef3f8;border-color:#d8e0ea}
+  /* o margin-left:auto morava no #btn-risco, que era o primeiro dos dois
+     botões; com ele fora, é o tema que passa a empurrar a dupla para a
+     direita. Sem isto o botão cola no subtítulo. */
   #btn-theme{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;
-    width:38px;height:38px;font-size:1rem;cursor:pointer;font-family:inherit;flex:none}
-  #btn-risco{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;
     width:38px;height:38px;font-size:1rem;cursor:pointer;font-family:inherit;flex:none;margin-left:auto}
-  #btn-risco.on{color:var(--green);border-color:var(--green)}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{
@@ -209,7 +209,10 @@
         <h1>Painel de <span>Notas</span></h1>
         <div class="sub">3ª série EM · 2026 · meta de <b>24 pts</b> no ano por matéria (média 6,0)</div>
       </div>
-      <button id="btn-risco" onclick="compartilharRisco()" title="Compartilhar resumo de risco com professores (opt-in)">📤</button>
+      <!-- B2: o botão 📤 ("compartilhar resumo com professores") saiu daqui.
+           Ele dependia de o aluno em dificuldade tomar a iniciativa de se
+           expor — ou seja, falhava justamente em quem precisava. Quem faz esse
+           trabalho agora é a projeção por matéria, automática e com escopo. -->
       <button id="btn-theme" onclick="EducaTheme.toggle()" title="Alternar tema claro/escuro">☀️</button>
     </div>
 
@@ -303,6 +306,24 @@
         <button class="btn purple" onclick="relatorioPDF()">📄 Relatório do mês (PDF)</button>
         <button class="btn danger" onclick="resetSeed()">↺ Limpar tudo e recomeçar</button>
       </div>
+    </div>
+
+    <!-- LGPD art. 18. Fica separado do backup de propósito: backup é uma cópia
+         das suas notas neste painel; isto aqui é TUDO o que o Estuda+ guarda
+         sobre você, inclusive o que os seus professores enxergam. -->
+    <div class="panelbox" style="margin-top:16px">
+      <h2 style="font-size:1.05rem;margin-bottom:8px">🔐 Seus dados e seus direitos</h2>
+      <p class="muted" style="font-size:.86rem;line-height:1.7;margin-bottom:14px">
+        Você pode <b>levar</b> ou <b>apagar</b> tudo o que o Estuda+ guarda sobre você, a qualquer momento e sem pedir para ninguém. Isso inclui o seu perfil, os três painéis, a sua matrícula na turma e a situação por matéria que os seus professores acompanham.
+        <br><b>As notas na plataforma oficial da escola não são afetadas por nada disto</b> — elas não são nossas.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn green" onclick="baixarMeusDados()">📦 Baixar tudo o que guardamos sobre mim</button>
+        <button class="btn danger" onclick="apagarMeusDados()">🗑️ Apagar todos os meus dados</button>
+      </div>
+      <p class="muted" style="font-size:.8rem;margin-top:10px">
+        Apagar não tem volta. Baixe antes, se quiser guardar uma cópia.
+      </p>
     </div>
   </section>
 

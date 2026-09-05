@@ -8,8 +8,21 @@ rules_version = '2';
 // ao mesmo tempo. Um deploy daqui muda os dois ambientes.
 //
 // Revisão de 23/08/2026 — fecha V-01, V-03, V-11 e metade da V-02 da auditoria.
+//
+// Revisão de 05/09/2026 — fecha os dois pontos em que a TELA dizia uma coisa e
+// a REGRA permitia outra. Eram os dois itens que a proposta comercial já
+// afirmava como verdade:
+//   1. escopo do professor: `salas/{sala}/alunos` e `risco` liberavam para
+//      QUALQUER staff. Um professor lia o nome e o e-mail de todos os alunos
+//      de todas as salas, e o resumo de risco de todas as séries. A tela
+//      filtrava; o banco não. Agora professor lê só as salas do escopo dele.
+//   2. exclusão de dados: `allow delete: if false` em users/{uid} e nos
+//      painéis significava que NINGUÉM apagava — nem o dono, nem a
+//      coordenação. Sem isso não existe atendimento a pedido de exclusão
+//      (LGPD art. 18), que a proposta afirma existir.
+// Junto: B2 (aposenta o opt-in de risco) e D1 (trilha de mudança de faixa).
+//
 // Continuam ABERTAS e documentadas em Estuda+/Auditoria de Segurança.md:
-//   V-10 e-mail mestre hardcoded (precisa de custom claim = backend)
 //   V-01 parcial: coordenação ainda escreve staff direto do navegador; o ideal
 //        é só via Admin SDK com auditoria, o que exige Cloud Functions.
 // ============================================================================
@@ -43,11 +56,22 @@ service cloud.firestore {
       return escola == 'coc-atibaia';
     }
 
-    // V-10 (dívida conhecida): endereço fixo no código. Sai quando existir
-    // custom claim emitida por servidor. É o único caminho de recuperação se
-    // o documento de coordenação for apagado por engano — por isso fica.
+    // V-10, primeira metade: a claim já vale. `tools/set-admin-claim.mjs`
+    // grava `admin:true` no token com o Admin SDK rodando na máquina do dono
+    // — não é Cloud Functions, não é plano pago.
+    //
+    // O e-mail fixo continua ao lado DE PROPÓSITO, e sai numa segunda etapa.
+    // Motivo: enquanto a claim não estiver valendo num token renovado, tirar o
+    // e-mail tranca o dono para fora — só coordenação cadastra staff (V-01), e
+    // se o documento de coordenação sumir não há outro caminho de volta.
+    // A ordem segura é: gerar a chave → rodar o script → sair e entrar de novo
+    // → confirmar que ⚙️ Gestão ainda abre → SÓ ENTÃO apagar a linha do e-mail.
+    function temClaimAdmin() {
+      return request.auth.token.get('admin', false) == true;
+    }
     function ehMaster() {
-      return verificado() && myEmail() == 'luizanthonylopes@gmail.com';
+      return verificado()
+             && (temClaimAdmin() || myEmail() == 'luizanthonylopes@gmail.com');
     }
 
     function staffDoc(escola) {
@@ -69,6 +93,15 @@ service cloud.firestore {
                      && get(staffDoc(escola)).data.role == 'coordenacao'));
     }
 
+    // `users/{uid}` mora FORA de `schools/{escola}/`, então não há variável de
+    // escola no caminho para passar adiante. Enquanto existe uma escola só, o
+    // id é constante — é a mesma premissa que `escolaConhecida()` já assume.
+    // Quando entrar a segunda escola, isto vira consulta ao documento de
+    // membro do aluno, junto com o resto da multi-tenancy.
+    function ehCoordDaEscolaUnica() {
+      return ehCoord('coc-atibaia');
+    }
+
     /* --------------------------- perfil do aluno ------------------------ */
     // V-11: antes era um wildcard `users/{uid}/{document=**}` com write livre,
     // então o próprio aluno podia gravar role:"coordenacao" no seu perfil.
@@ -83,6 +116,21 @@ service cloud.firestore {
       return ['email', 'nome', 'serie', 'turma', 'vestibulares'];
     }
 
+    /* Exclusão (LGPD art. 18). Antes era `allow delete: if false` aqui e nos
+       painéis — ou seja, NINGUÉM apagava: nem o próprio aluno, nem a
+       coordenação, nem o dono do sistema. Um aluno que saísse da escola ficava
+       na base para sempre, e não havia como atender um pedido de exclusão.
+
+       Quem pode apagar, e por quê:
+       - o DONO, porque o direito é dele;
+       - a COORDENAÇÃO, porque é a escola que RECEBE o pedido (ela é a
+         controladora; o Estuda+ é operador) e porque o aluno que já saiu
+         costuma nunca mais abrir o app — sem este caminho o pedido dela ficaria
+         sem resposta possível.
+
+       Repare que a coordenação apaga sem poder LER: o `read` continua só do
+       dono. É de propósito — atender exclusão não exige ver o conteúdo, e dar
+       leitura junto seria ampliar poder sem finalidade. */
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn() && request.auth.uid == uid
@@ -90,16 +138,21 @@ service cloud.firestore {
       allow update: if signedIn() && request.auth.uid == uid
                     && request.resource.data.diff(resource.data)
                          .affectedKeys().hasOnly(camposPerfil());
-      allow delete: if false;
+      allow delete: if (signedIn() && request.auth.uid == uid)
+                    || ehCoordDaEscolaUnica();
     }
 
     // Dados dos painéis (notas, estudos, vestibular): só o dono, e só no
     // formato { blob, updatedAt } que o cliente realmente grava.
+    // A exportação (o outro direito do art. 18) não precisa de regra nova: o
+    // dono já lê tudo isto, e é daqui que o botão "baixar meus dados" monta o
+    // arquivo.
     match /users/{uid}/panels/{painel} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
                             && request.resource.data.keys().hasOnly(['blob', 'updatedAt']);
-      allow delete: if false;
+      allow delete: if (signedIn() && request.auth.uid == uid)
+                    || ehCoordDaEscolaUnica();
     }
 
     /* ------------------------------ staff ------------------------------- */
@@ -129,28 +182,37 @@ service cloud.firestore {
       allow write: if ehStaff(escola);
     }
 
-    /* ------------------------ resumo de risco (opt-in) ------------------- */
-    // Dado pedagógico sensível: só staff lê, e o aluno só escreve o próprio,
-    // na própria escola e na própria série (antes dava para gravar em
-    // qualquer caminho de escola/série — parte da V-03).
-    // O `delete` do dono existe para permitir a revogação de consentimento
-    // (V-05); o botão que chama isso ainda não foi construído.
+    /* -------------- resumo de risco — APOSENTADO (B2) -------------------- */
+    // Este era o opt-in: o aluno clicava em 📤 para compartilhar a situação
+    // dele com a escola. Duas razões para acabar, e a segunda só ficou
+    // visível agora:
+    //
+    // 1. O mecanismo falhava exatamente onde importava. Quem está em risco é
+    //    quem NÃO clica. Um alerta que depende do aluno em dificuldade tomar a
+    //    iniciativa de se expor não é um alerta.
+    //
+    // 2. Era o segundo vazamento de escopo. `allow read: if ehStaff(escola)`
+    //    dava a QUALQUER professor cadastrado o resumo de TODOS os alunos de
+    //    TODAS as séries — e aqui não havia como consertar só a regra: `risco`
+    //    mora em `series/{serie}/`, não em `salas/{sala}/`, então não existe
+    //    sala no caminho para comparar com o escopo do professor. O dado
+    //    estava guardado num formato que o modelo de escopo não expressa.
+    //
+    // O que substitui: a projeção do B1 logo abaixo, que carrega a mesma
+    // informação e já nasce com escopo por sala e matéria.
+    //
+    // Por que a regra continua existindo em vez de sumir: ainda há documentos
+    // gravados. Escrita nova está fechada; o que resta é poder apagá-los. O app
+    // do aluno apaga o próprio na primeira abertura, e a coordenação tem um
+    // botão para varrer o que sobrar. Quando a coleção estiver vazia, este
+    // bloco inteiro sai.
     match /schools/{escola}/series/{serie}/risco/{uid} {
-      allow read: if ehStaff(escola);
-      // V-05: `email` saiu da lista — a equipe já identifica o aluno pelo nome
-      // e pela turma, então guardar o e-mail junto não servia a nenhuma
-      // finalidade declarada. Entraram `consentVersao` e `consentEm`: sem
-      // registrar QUAL consentimento e QUANDO, não há como provar que houve.
-      allow create, update: if signedIn() && escolaConhecida(escola)
-                            && request.auth.uid == uid
-                            && request.resource.data.keys().hasOnly(
-                                 ['nome', 'serie', 'turma', 'pctMeta',
-                                  'materias', 'atualizado',
-                                  'consentVersao', 'consentEm'])
-                            && request.resource.data.serie == serie
-                            && request.resource.data.consentVersao is string;
-      // revogação: o dono apaga o próprio resumo quando quiser
-      allow delete: if signedIn() && request.auth.uid == uid;
+      // professor NÃO lê mais — era o vazamento. Só o dono e a coordenação,
+      // e só para conseguir enxergar o que ainda precisa ser apagado.
+      allow read: if signedIn() && escolaConhecida(escola)
+                  && (request.auth.uid == uid || ehCoord(escola));
+      allow create, update: if false;
+      allow delete: if (signedIn() && request.auth.uid == uid) || ehCoord(escola);
     }
 
     /* ------------------- A1/A2: escopo do professor ----------------------- */
@@ -168,6 +230,17 @@ service cloud.firestore {
       return ehStaff(escola)
              && (sala in staffInfo(escola).get('salas', []))
              && (materia in staffInfo(escola).get('materias', []));
+    }
+    // Só a sala, sem a matéria: é o que a lista de alunos da turma precisa.
+    // Um professor de Biologia da 3ªB continua vendo QUEM está na 3ªB — isso
+    // é o trabalho dele. O que ele deixa de ver é a 3ªA, a 2ªC, etc.
+    //
+    // ATENÇÃO ao usar: chame sempre depois de `ehCoord(...)` num `||`. O
+    // `staffInfo` faz get() no documento de staff, e a coordenação-mestre pode
+    // não ter documento nenhum (o poder dela vem da claim/e-mail). Sem o
+    // curto-circuito do ehCoord antes, a regra erraria em vez de liberar.
+    function ehProfessorDaSala(escola, sala) {
+      return ehStaff(escola) && (sala in staffInfo(escola).get('salas', []));
     }
     // lista canônica — a mesma de app/escola.js. Existe em duplicata de
     // propósito: a regra não pode importar o JS, e sem ela o cliente criaria
@@ -208,6 +281,45 @@ service cloud.firestore {
       allow delete: if (signedIn() && request.auth.uid == uid) || ehCoord(escola);
     }
 
+    /* ------------- D1: trilha de mudança de faixa (o alerta) -------------- */
+    // O que o professor precisa saber não é "está em vermelho" — isso ele vê
+    // na projeção acima. É "MUDOU para vermelho, e faz dois dias". Estado
+    // parado não é notícia; a transição é. Por isso o que se grava aqui é o
+    // par (de → para), e nunca se altera depois.
+    //
+    // Mesmo desenho e mesma honestidade da projeção: quem escreve é o
+    // navegador do aluno, então o carimbo `quando` é o momento em que ELE
+    // abriu o app, não o momento em que a nota mudou na secretaria.
+    //
+    // Escopo idêntico ao do B1 de propósito — a transição é tão sensível
+    // quanto a nota que a gerou, e cair num escopo mais frouxo aqui
+    // reabriria pela porta dos fundos o vazamento que o B2 acabou de fechar.
+    match /schools/{escola}/salas/{sala}/materias/{materia}/transicoes/{id} {
+      allow read: if signedIn() && escolaConhecida(escola)
+                  && (request.auth.uid == resource.data.uid
+                      || ehCoord(escola)
+                      || ehProfessorDe(escola, sala, materia));
+
+      allow create: if signedIn() && escolaConhecida(escola)
+                    && request.auth.uid == request.resource.data.uid
+                    && materiaValida(materia)
+                    && alunoAprovado(escola, sala, request.auth.uid)
+                    && request.resource.data.keys().hasOnly(
+                         ['uid', 'nome', 'de', 'para', 'quando'])
+                    && request.resource.data.de is string
+                    && request.resource.data.para is string
+                    && request.resource.data.de != request.resource.data.para
+                    && request.resource.data.quando is number;
+
+      // append-only, como a trilha de auditoria: reescrever uma transição
+      // depois seria reescrever o histórico que o professor usa para decidir.
+      allow update: if false;
+
+      // apagar existe pelo mesmo motivo do resto: pedido de exclusão de dados.
+      allow delete: if (signedIn() && request.auth.uid == resource.data.uid)
+                    || ehCoord(escola);
+    }
+
     /* -------------------------------- salas ------------------------------ */
     // A0: a sala vira entidade, e a matrícula tem dono — o aluno PEDE, a
     // coordenação APROVA. Antes "turma" era uma letra que o próprio aluno
@@ -223,10 +335,23 @@ service cloud.firestore {
     }
 
     match /schools/{escola}/salas/{sala}/alunos/{uid} {
-      // o aluno lê a própria matrícula (pra saber se já foi aprovado);
-      // staff lê a sala inteira, pra montar a fila e a lista da turma.
+      // O aluno lê a própria matrícula (pra saber se já foi aprovado).
+      //
+      // CORREÇÃO DE 05/09/2026 — aqui estava `ehStaff(escola)`, que é só
+      // "tem documento de staff" e não olha `salas`. Resultado: qualquer
+      // professor cadastrado lia nome, e-mail, série e turma de TODOS os
+      // alunos de TODAS as salas da escola. A tela filtrava certo, então nada
+      // parecia quebrado — o vazamento só aparecia para quem abrisse o console
+      // do navegador. Era o primeiro dos dois pontos em que a proposta
+      // comercial afirmava um escopo que o banco não aplicava.
+      //
+      // O padrão correto já existia neste arquivo, na regra do B1 logo acima.
+      // Agora vale aqui também: coordenação vê tudo (A2), professor vê as
+      // salas do escopo dele.
       allow read: if signedIn() && escolaConhecida(escola)
-                  && (request.auth.uid == uid || ehStaff(escola));
+                  && (request.auth.uid == uid
+                      || ehCoord(escola)
+                      || ehProfessorDaSala(escola, sala));
 
       // ESTA é a regra que sustenta o A0 inteiro: o aluno cria o PRÓPRIO
       // pedido e ele nasce obrigatoriamente 'pendente'. Ninguém entra numa

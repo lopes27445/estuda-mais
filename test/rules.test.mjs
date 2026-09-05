@@ -146,40 +146,43 @@ describe("V-03 · não se atravessa para outra escola", () => {
     await assertFails(getDoc(doc(alunoDb, `schools/${OUTRA}/series/3/provas/p1`)));
   });
 
-  it("9. aluno NÃO grava resumo de risco em outra escola", async () => {
+  /* Os antigos 9 a 12 testavam o isolamento entre escolas pela escrita do
+     resumo de risco. Com o B2 essa escrita está fechada para todo mundo, então
+     ali passariam por motivo errado — testes que passam porque a operação
+     inteira sumiu não provam isolamento nenhum. O mesmo cenário migrou para a
+     projeção de notas, que é o caminho de escrita que sobrou. */
+  it("9. aluno NÃO publica projeção de nota em outra escola", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${OUTRA}/salas/3B/alunos/uid-aluno`), {
+        nome: "Aluno", email: "aluno@escola.com", serie: "3", turma: "B",
+        status: "aprovado", pedidoEm: Date.now()
+      });
+    });
     await assertFails(
-      setDoc(doc(alunoDb, `schools/${OUTRA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [],
-        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
+      setDoc(doc(alunoDb, `schools/${OUTRA}/salas/3B/materias/matematica/notas/uid-aluno`), {
+        nome: "Aluno", status: "risco", acc: 12, precisa: 8, fechou: false,
+        medias: [6, 6, null, null], atualizado: Date.now()
       })
     );
   });
 
-  it("10. aluno NÃO grava risco numa série diferente da do caminho", async () => {
+  it("10. aluno NÃO pede matrícula em sala de outra escola", async () => {
     await assertFails(
-      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", serie: "1", turma: "A", pctMeta: 40, materias: [],
-        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
+      setDoc(doc(alunoDb, `schools/${OUTRA}/salas/3B/alunos/uid-aluno`), {
+        nome: "Aluno", email: "aluno@escola.com", serie: "3", turma: "B",
+        status: "pendente", pedidoEm: Date.now()
       })
     );
   });
 
-  it("11. aluno CONSEGUE gravar o próprio risco na própria escola/série", async () => {
-    await assertSucceeds(
-      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [],
-        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
-      })
+  it("11. staff de escola conhecida NÃO publica calendário em escola desconhecida", async () => {
+    await assertFails(
+      setDoc(doc(coordDb, `schools/${OUTRA}/series/3/provas/p2`), { disc: "Química" })
     );
   });
 
-  it("12. aluno NÃO grava risco no lugar de outro aluno", async () => {
-    await assertFails(
-      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-outro`), {
-        nome: "Outro", serie: "3", turma: "A", pctMeta: 10, materias: [],
-        atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
-      })
-    );
+  it("12. aluno NÃO lê a trilha de auditoria de outra escola", async () => {
+    await assertFails(getDoc(doc(alunoDb, `schools/${OUTRA}/auditoria/a1`)));
   });
 });
 
@@ -253,31 +256,123 @@ describe("Lista de staff não é pública", () => {
   });
 });
 
-/* ============ V-05 — consentimento e revogação ============ */
-describe("V-05 · consentimento identificado e revogável", () => {
-  it("24. aluno NÃO grava resumo sem registrar o consentimento", async () => {
-    await assertFails(
-      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [], atualizado: Date.now()
-      })
-    );
+/* ============ B2 — o opt-in de risco foi aposentado ============
+   Era `allow read: if ehStaff(escola)`: QUALQUER professor cadastrado lia o
+   resumo de TODOS os alunos de TODAS as séries. Não dava para consertar só a
+   regra — `risco` mora em `series/`, sem sala no caminho para comparar com o
+   escopo do professor. Então a escrita fechou e a leitura encolheu; o que
+   resta é poder apagar o que já foi gravado. */
+describe("B2 · resumo de risco aposentado", () => {
+  const resumo = {
+    nome: "Aluno", serie: "3", turma: "A", pctMeta: 40, materias: [],
+    atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
+  };
+  const legado = async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/series/3/risco/uid-aluno`), resumo);
+    });
+  };
+
+  it("24. ninguém grava resumo novo — nem o próprio aluno", async () => {
+    await assertFails(setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), resumo));
   });
 
-  it("25. aluno NÃO grava e-mail junto (campo removido por minimização)", async () => {
-    await assertFails(
-      setDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), {
-        nome: "Aluno", email: "aluno@escola.com", serie: "3", turma: "A", pctMeta: 40,
-        materias: [], atualizado: Date.now(), consentVersao: "1", consentEm: Date.now()
-      })
-    );
+  it("25. nem a coordenação grava (o caminho de escrita não existe mais)", async () => {
+    await assertFails(setDoc(doc(coordDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`), resumo));
   });
 
-  it("26. aluno CONSEGUE revogar apagando o próprio resumo", async () => {
-    await assertSucceeds(deleteDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+  it("26. ESTE era o vazamento: professor NÃO lê mais o resumo de um aluno", async () => {
+    await legado();
+    await assertFails(getDoc(doc(profDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+    await assertFails(getDocs(collection(profDb, `schools/${ESCOLA}/series/3/risco`)));
   });
 
   it("27. professor NÃO apaga o resumo de um aluno", async () => {
+    await legado();
     await assertFails(deleteDoc(doc(profDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+  });
+
+  it("27b. o dono CONSEGUE apagar o próprio (é o que o app faz sozinho ao abrir)", async () => {
+    await legado();
+    await assertSucceeds(deleteDoc(doc(alunoDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+  });
+
+  it("27c. coordenação CONSEGUE ler e varrer o que sobrou de quem não reabriu o app", async () => {
+    await legado();
+    await assertSucceeds(getDocs(collection(coordDb, `schools/${ESCOLA}/series/3/risco`)));
+    await assertSucceeds(deleteDoc(doc(coordDb, `schools/${ESCOLA}/series/3/risco/uid-aluno`)));
+  });
+});
+
+/* ============ LGPD art. 18 — exportar e apagar ============
+   Antes era `allow delete: if false` no perfil e nos painéis: NINGUÉM apagava.
+   A proposta comercial já afirmava que este caminho existia. */
+describe("LGPD · exclusão de dados", () => {
+  it("58. o dono CONSEGUE apagar o próprio perfil", async () => {
+    await assertSucceeds(deleteDoc(doc(alunoDb, "users/uid-aluno")));
+  });
+
+  it("59. o dono CONSEGUE apagar o próprio painel", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "users/uid-aluno/panels/notas-lab2"),
+        { blob: {}, updatedAt: Date.now() });
+    });
+    await assertSucceeds(deleteDoc(doc(alunoDb, "users/uid-aluno/panels/notas-lab2")));
+  });
+
+  it("60. coordenação CONSEGUE apagar (é ela que RECEBE o pedido de exclusão)", async () => {
+    await assertSucceeds(deleteDoc(doc(coordDb, "users/uid-outro")));
+    await assertSucceeds(deleteDoc(doc(coordDb, "users/uid-outro/panels/notas-lab2")));
+  });
+
+  it("61. mas a coordenação continua SEM LER o perfil — apagar não exige ver", async () => {
+    await assertFails(getDoc(doc(coordDb, "users/uid-outro")));
+    await assertFails(getDoc(doc(coordDb, "users/uid-outro/panels/notas-lab2")));
+  });
+
+  it("62. professor NÃO apaga dado de aluno nenhum", async () => {
+    await assertFails(deleteDoc(doc(profDb, "users/uid-outro")));
+    await assertFails(deleteDoc(doc(profDb, "users/uid-outro/panels/notas-lab2")));
+  });
+
+  it("63. aluno NÃO apaga o perfil de outro aluno", async () => {
+    await assertFails(deleteDoc(doc(alunoDb, "users/uid-outro")));
+    await assertFails(deleteDoc(doc(alunoDb, "users/uid-outro/panels/notas-lab2")));
+  });
+
+  it("64. a exportação não precisou de regra nova: o dono já lê tudo o que é dele", async () => {
+    await assertSucceeds(getDoc(doc(alunoDb, "users/uid-aluno")));
+    await assertSucceeds(getDocs(collection(alunoDb, "users/uid-aluno/panels")));
+  });
+});
+
+/* ============ V-10 — a claim de admin já vale ============ */
+describe("V-10 · poder de dono por custom claim", () => {
+  it("65. token com claim admin age como coordenação, sem estar no staff", async () => {
+    const adminDb = env.authenticatedContext("uid-dono", {
+      email: "outro-endereco@example.com", email_verified: true, admin: true
+    }).firestore();
+    await assertSucceeds(getDocs(collection(adminDb, `schools/${ESCOLA}/staff`)));
+    await assertSucceeds(
+      setDoc(doc(adminDb, `schools/${ESCOLA}/staff/novo@escola.com`), { role: "professor" })
+    );
+  });
+
+  it("66. claim ausente ou falsa não dá poder nenhum", async () => {
+    const falsoDb = env.authenticatedContext("uid-falso-admin", {
+      email: "ninguem@example.com", email_verified: true, admin: false
+    }).firestore();
+    await assertFails(getDocs(collection(falsoDb, `schools/${ESCOLA}/staff`)));
+    await assertFails(
+      setDoc(doc(falsoDb, `schools/${ESCOLA}/staff/novo@escola.com`), { role: "coordenacao" })
+    );
+  });
+
+  it("67. claim admin com e-mail NÃO confirmado não vale (V-02 continua valendo)", async () => {
+    const naoVerif = env.authenticatedContext("uid-admin-naoverif", {
+      email: "dono@example.com", email_verified: false, admin: true
+    }).firestore();
+    await assertFails(getDocs(collection(naoVerif, `schools/${ESCOLA}/staff`)));
   });
 });
 
@@ -386,8 +481,41 @@ describe("A0 · matrícula em sala", () => {
     );
   });
 
-  it("39. professor CONSEGUE ler a lista da sala (precisa disso pra dar aula)", async () => {
+  /* Estes três substituem o antigo teste 39, que era só
+     "professor CONSEGUE ler a lista da sala" e passava com o staff sem NENHUM
+     vínculo — porque a regra pedia apenas `ehStaff()`. Ele passava exatamente
+     por causa do defeito: qualquer professor lia a lista de qualquer sala.
+     Agora o mesmo cenário se divide em "a sala dele sim" e "a de fora não". */
+  async function vincula(salasProf) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/staff/prof@escola.com`), {
+        role: "professor", salas: salasProf, materias: ["matematica"]
+      });
+    });
+  }
+
+  it("39. professor CONSEGUE ler a lista da SUA sala (precisa disso pra dar aula)", async () => {
+    await vincula([SALA]);
     await assertSucceeds(getDocs(collection(profDb, `schools/${ESCOLA}/salas/${SALA}/alunos`)));
+  });
+
+  it("39b. professor NÃO lê a lista de uma sala fora do escopo dele", async () => {
+    await vincula(["3A"]);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-outro`), pedido);
+    });
+    await assertFails(getDocs(collection(profDb, `schools/${ESCOLA}/salas/${SALA}/alunos`)));
+    await assertFails(getDoc(doc(profDb, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-outro`)));
+  });
+
+  it("39c. professor SEM sala nenhuma não lê lista de aluno alguma", async () => {
+    await vincula([]);
+    await assertFails(getDocs(collection(profDb, `schools/${ESCOLA}/salas/${SALA}/alunos`)));
+  });
+
+  it("39d. A2: coordenação continua lendo qualquer sala", async () => {
+    await assertSucceeds(getDocs(collection(coordDb, `schools/${ESCOLA}/salas/${SALA}/alunos`)));
+    await assertSucceeds(getDocs(collection(coordDb, `schools/${ESCOLA}/salas/3A/alunos`)));
   });
 
   it("40. aluno NÃO lê a matrícula de outro aluno", async () => {
@@ -527,5 +655,98 @@ describe("A1/A2/B1 · escopo do professor sobre notas", () => {
     await semear();
     await assertSucceeds(setDoc(doc(coordDb, `schools/${ESCOLA}/staff/prof@escola.com`),
       { salas: ["3A"], materias: ["biologia"] }, { merge: true }));
+  });
+});
+
+/* ============ D1 — trilha de mudança de faixa ============
+   O escopo tem que ser IDÊNTICO ao da projeção do B1. Se aqui fosse mais
+   frouxo, a transição reabriria pela porta dos fundos o mesmo vazamento que o
+   B2 acabou de fechar — e com o agravante de dizer também QUANDO piorou. */
+describe("D1 · alerta de queda de faixa", () => {
+  const SALA = "3B", MAT = "matematica", OUTRAMAT = "biologia";
+  const trilha = (sala, mat) => `schools/${ESCOLA}/salas/${sala}/materias/${mat}/transicoes`;
+  const evento = { uid: "uid-aluno", nome: "Aluno Teste", de: "atencao", para: "risco", quando: Date.now() };
+
+  async function semear({ aprovado = true, salasProf = [SALA], materiasProf = [MAT] } = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), {
+        nome: "Aluno Teste", email: "aluno@escola.com", serie: "3", turma: "B",
+        status: aprovado ? "aprovado" : "pendente", pedidoEm: Date.now()
+      });
+      await setDoc(doc(db, `schools/${ESCOLA}/staff/prof@escola.com`), {
+        role: "professor", salas: salasProf, materias: materiasProf
+      });
+    });
+  }
+  async function gravado(mat = MAT) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${trilha(SALA, mat)}/t1`), evento);
+    });
+  }
+
+  it("68. aluno aprovado CONSEGUE registrar a própria mudança de faixa", async () => {
+    await semear();
+    await assertSucceeds(setDoc(doc(alunoDb, `${trilha(SALA, MAT)}/t1`), evento));
+  });
+
+  it("69. aluno PENDENTE não registra nada (mesma porta do B1)", async () => {
+    await semear({ aprovado: false });
+    await assertFails(setDoc(doc(alunoDb, `${trilha(SALA, MAT)}/t1`), evento));
+  });
+
+  it("70. transição sem mudança de verdade é recusada (de == para)", async () => {
+    await semear();
+    await assertFails(setDoc(doc(alunoDb, `${trilha(SALA, MAT)}/t1`),
+      Object.assign({}, evento, { de: "risco", para: "risco" })));
+  });
+
+  it("71. aluno NÃO registra transição no nome de outro", async () => {
+    await semear();
+    await assertFails(setDoc(doc(alunoDb, `${trilha(SALA, MAT)}/t1`),
+      Object.assign({}, evento, { uid: "uid-outro" })));
+  });
+
+  it("72. append-only: nem o próprio autor reescreve depois", async () => {
+    await semear();
+    await gravado();
+    await assertFails(setDoc(doc(alunoDb, `${trilha(SALA, MAT)}/t1`),
+      Object.assign({}, evento, { para: "ok" })));
+  });
+
+  it("73. professor da sala+matéria CONSEGUE ler o alerta", async () => {
+    await semear();
+    await gravado();
+    await assertSucceeds(getDocs(collection(profDb, trilha(SALA, MAT))));
+  });
+
+  it("74. professor NÃO lê alerta de matéria que não é dele", async () => {
+    await semear({ materiasProf: [MAT] });
+    await gravado(OUTRAMAT);
+    await assertFails(getDocs(collection(profDb, trilha(SALA, OUTRAMAT))));
+  });
+
+  it("75. professor NÃO lê alerta de sala que não é dele", async () => {
+    await semear({ salasProf: ["3A"] });
+    await gravado();
+    await assertFails(getDocs(collection(profDb, trilha(SALA, MAT))));
+  });
+
+  it("76. A2: coordenação lê qualquer trilha", async () => {
+    await semear({ salasProf: [], materiasProf: [] });
+    await gravado();
+    await assertSucceeds(getDocs(collection(coordDb, trilha(SALA, MAT))));
+  });
+
+  it("77. o dono apaga a própria trilha — é parte do pedido de exclusão", async () => {
+    await semear();
+    await gravado();
+    await assertSucceeds(deleteDoc(doc(alunoDb, `${trilha(SALA, MAT)}/t1`)));
+  });
+
+  it("78. professor NÃO apaga a trilha de ninguém", async () => {
+    await semear();
+    await gravado();
+    await assertFails(deleteDoc(doc(profDb, `${trilha(SALA, MAT)}/t1`)));
   });
 });

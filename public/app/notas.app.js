@@ -151,6 +151,65 @@ function fecharBoletim(){ const m=document.getElementById("modal-root"); if(m) m
 let _pubTimer = null;
 function agendarPublicacao(){ clearTimeout(_pubTimer); _pubTimer = setTimeout(publicarNotas, 1500); }
 
+/* D1 — a faixa anterior de cada matéria, para saber quando houve MUDANÇA.
+   Fica em localStorage porque comparar contra o banco a cada digitação
+   custaria uma leitura por matéria por tecla salva — com 10 matérias isso
+   estoura a cota do plano Spark sozinho. O banco só é consultado quando o
+   aparelho ainda não conhece a faixa (ver `publicarUmaMateria`). */
+const FAIXA_KEY = "educa-faixa";
+function faixasConhecidas(){
+  try{ return JSON.parse(localStorage.getItem(FAIXA_KEY)) || {}; }catch(e){ return {}; }
+}
+function gravaFaixa(materiaId, faixa){
+  const m = faixasConhecidas(); m[materiaId] = faixa;
+  try{ localStorage.setItem(FAIXA_KEY, JSON.stringify(m)); }catch(e){}
+}
+function faixaDe(sub){
+  const st = statusOf(resumo(sub));
+  return st.cls==="green" ? "ok" : (st.cls==="red" ? "risco" : "atencao");
+}
+
+function publicarUmaMateria(raiz, mat, sub, uid, nome, agora){
+  const r = resumo(sub), novo = faixaDe(sub);
+  const notaRef = raiz.collection("materias").doc(mat.id).collection("notas").doc(uid);
+  const cache = faixasConhecidas();
+
+  /* De onde sai a faixa ANTERIOR. Se este aparelho já publicou antes, é o que
+     está no cache. Se não (celular novo, cache limpo), vem do que já está
+     gravado no banco — sem isso, trocar de aparelho inventaria uma transição
+     que não houve, ou, pior, engoliria uma real. Custa uma leitura só, uma
+     vez por matéria por aparelho. */
+  const anteriorP = (mat.id in cache)
+    ? Promise.resolve(cache[mat.id])
+    : notaRef.get().then(function(s){ return s.exists ? (s.data().status || null) : null; })
+                   .catch(function(){ return null; });
+
+  return anteriorP.then(function(anterior){
+    const gravaProjecao = notaRef.set({
+      nome: nome,
+      status: novo,
+      acc: Math.round(r.acc*100)/100,
+      // precisa pode ser Infinity quando não há bimestre restante — o
+      // Firestore não aceita Infinity, então vira um teto numérico
+      precisa: isFinite(r.precisa) ? Math.round(Math.min(99, r.precisa)*100)/100 : 99,
+      fechou: !!r.fechou,
+      medias: sub.bims.map(function(b){ const v = medArred(b, sub.semAV2); return v==null ? null : v; }),
+      atualizado: agora
+    });
+
+    return gravaProjecao.then(function(){
+      gravaFaixa(mat.id, novo);
+      if(!anterior || anterior === novo) return;
+      /* A transição vai DEPOIS da projeção, de propósito: se esta escrita
+         falhar, o professor perde o aviso — mas nunca fica com um aviso que a
+         projeção não confirma. O contrário seria pior. */
+      return raiz.collection("materias").doc(mat.id).collection("transicoes")
+        .add({ uid: uid, nome: nome, de: anterior, para: novo, quando: agora })
+        .catch(function(){});
+    });
+  }).catch(function(){});
+}
+
 function publicarNotas(){
   if(!(window.Cloud && Cloud.user && Cloud.firestore && Cloud.firestore() && window.EP && window.Escola)) return;
   if(window.EP.role !== "aluno") return;
@@ -167,19 +226,8 @@ function publicarNotas(){
     state.subjects.forEach(function(sub){
       const mat = Escola.materiaPorNome(sub.name);
       if(!mat) return;                    // matéria fora da lista canônica não é publicada
-      const r = resumo(sub), st = statusOf(r);
       publicadas++;
-      raiz.collection("materias").doc(mat.id).collection("notas").doc(uid).set({
-        nome: nome,
-        status: st.cls==="green" ? "ok" : (st.cls==="red" ? "risco" : "atencao"),
-        acc: Math.round(r.acc*100)/100,
-        // precisa pode ser Infinity quando não há bimestre restante — o
-        // Firestore não aceita Infinity, então vira um teto numérico
-        precisa: isFinite(r.precisa) ? Math.round(Math.min(99, r.precisa)*100)/100 : 99,
-        fechou: !!r.fechou,
-        medias: sub.bims.map(function(b){ const v = medArred(b, sub.semAV2); return v==null ? null : v; }),
-        atualizado: agora
-      }).catch(function(){});
+      publicarUmaMateria(raiz, mat, sub, uid, nome, agora);
     });
     avisoVisibilidade(publicadas);
   }).catch(function(){});
@@ -194,7 +242,9 @@ function avisoVisibilidade(n){
   d.style.cssText = "margin-top:8px;padding-top:8px;border-top:1px solid rgba(58,214,255,.25)";
   d.innerHTML = "👁️ <b>Seus professores acompanham a sua situação.</b> Cada professor vê apenas "
     + "a matéria que leciona para a sua turma — médias dos bimestres e se você está tranquilo, "
-    + "em atenção ou em risco. A coordenação vê todas.";
+    + "em atenção ou em risco. A coordenação vê todas. "
+    + "Quando a sua situação numa matéria <b>muda de faixa</b>, o professor daquela matéria é avisado. "
+    + "Você pode baixar ou apagar tudo isso a qualquer momento, no fim desta página.";
   host.appendChild(d);
 }
 
@@ -505,79 +555,190 @@ function resetSeed(){
   if(window.Cloud && Cloud.flushSync) Cloud.flushSync();
 }
 
-/* ---------- compartilhar risco com professores (opt-in) ----------
-   Grava um resumo (sem notas cruas, só situação por matéria) em
-   schools/{school}/series/{serie}/risco/{uid} — só o próprio aluno escreve;
-   professor/coordenação leem pra acompanhar quem está em risco. */
-/* V-05 da auditoria. O que mudou:
-   - o texto dizia "anônimo" e mandava nome, e-mail e uid. Agora diz a verdade
-     ANTES de enviar, e o e-mail saiu (a equipe já identifica pelo nome+turma,
-     então guardar o e-mail junto não servia a finalidade nenhuma).
-   - grava QUAL consentimento e QUANDO. Sem isso não há como provar que houve.
-   - dá pra revogar, e a revogação apaga o documento de verdade. */
-const CONSENT_VERSAO = "2026-08-24";
-const CONSENT_TEXTO =
-  "Compartilhar com professores e coordenação:\n\n" +
-  "• seu NOME e sua turma\n" +
-  "• a situação de cada matéria (ok / atenção / risco)\n" +
-  "• o quanto você já somou da meta do ano\n\n" +
-  "NÃO é anônimo — a equipe vê que é você.\n" +
-  "Finalidade: acompanhamento pedagógico, para te oferecerem ajuda.\n" +
-  "Suas notas exatas não são enviadas.\n\n" +
-  "Você pode desfazer quando quiser, no mesmo botão.\n\nConfirma?";
+/* ---------- B2: o opt-in de risco foi aposentado ---------------------------
+   O botão 📤 gravava um resumo em series/{serie}/risco/{uid} e o aluno
+   escolhia compartilhar com a escola. Saiu por dois motivos:
 
-let _riscoPending=false;
-function riscoRef(serie){
-  return Cloud.firestore().collection("schools").doc(Cloud.school())
+   1. Falhava exatamente onde importava: quem está em risco é quem NÃO clica.
+      Um alerta que depende do aluno em dificuldade tomar a iniciativa de se
+      expor não é um alerta.
+   2. Era um vazamento de escopo — qualquer professor lia o resumo de TODOS os
+      alunos de TODAS as séries. E não dava para consertar só a regra: `risco`
+      mora em `series/`, sem sala no caminho para comparar com o escopo do
+      professor.
+
+   Quem faz esse trabalho agora é a projeção do B1 (`publicarNotas`), que
+   carrega a mesma informação e já nasce com escopo por sala e matéria, mais a
+   trilha de mudança de faixa (D1) que avisa o professor certo.
+
+   O que resta aqui é limpeza dos documentos que ficaram para trás. */
+const RISCO_LIMPO = "educa-risco-limpo";
+function limparRiscoLegado(){
+  if(!(window.Cloud && Cloud.user && Cloud.firestore && Cloud.firestore())) return;
+  try{ if(localStorage.getItem(RISCO_LIMPO)==="1") return; }catch(e){}
+  const serie = String((window.EP && window.EP.serie) || "3");
+  const ref = Cloud.firestore().collection("schools").doc(Cloud.school())
     .collection("series").doc(serie).collection("risco").doc(Cloud.user.uid);
+  /* get() antes do delete de propósito: apagar às cegas custaria uma escrita
+     por aluno por aparelho, e a maioria nunca chegou a compartilhar. Ler é
+     mais barato que escrever, e aqui acontece uma vez só. */
+  ref.get().then(function(s){
+    if(!s.exists){ _marcaRiscoLimpo(); return; }
+    return ref.delete().then(function(){
+      _marcaRiscoLimpo();
+      try{ localStorage.removeItem("educa-risco-ok"); }catch(e){}
+    });
+  }).catch(function(){ /* offline ou sem permissão: tenta de novo na próxima abertura */ });
 }
-function compartilharRisco(){
-  if(!(window.Cloud && Cloud.user && Cloud.firestore())){ alert("Faça login primeiro."); return; }
-  if(_riscoPending){ alert("Já tem um envio em andamento, aguarde."); return; }
-  const serie=(window.EP && window.EP.serie) || "3";
-  let jaCompartilhou=false;
-  try{ jaCompartilhou = localStorage.getItem("educa-risco-ok")==="1"; }catch(e){}
+function _marcaRiscoLimpo(){ try{ localStorage.setItem(RISCO_LIMPO,"1"); }catch(e){} }
 
-  if(jaCompartilhou){
-    if(confirm("Você já compartilha seu resumo.\n\nOK = atualizar com as notas de agora\nCancelar = parar de compartilhar e apagar o que a escola vê")) {
-      // segue e atualiza
-    } else { revogarRisco(serie); return; }
-  } else if(!confirm(CONSENT_TEXTO)) { return; }
+/* ---------- LGPD art. 18: baixar e apagar os próprios dados ----------------
+   Isto não existia. `firestore.rules` tinha `allow delete: if false` no perfil
+   e nos painéis — ninguém apagava, nem o dono. E não havia nenhuma função de
+   exportação em lugar nenhum do app.
 
-  const materias=state.subjects.map(s=>{
-    const r=resumo(s), st=statusOf(r);
-    return {id:s.id, name:s.name, acc:r.acc, precisa:r.precisa, fechou:r.fechou,
-            status: st.cls==="green"?"ok":(st.cls==="red"?"risco":"atencao")};
-  }).sort((a,b)=> a.status==="risco"?-1:1);
-  let accTotal=0; materias.forEach(m=>accTotal+=m.acc);
-  const pctMeta=Math.round(Math.min(100, accTotal/(META*state.subjects.length)*100));
-  const doc={ nome:Cloud.user.displayName||Cloud.user.email||"Aluno",
-    serie:serie, turma:(window.EP && window.EP.turma)||"—", pctMeta, materias,
-    atualizado:Date.now(), consentVersao:CONSENT_VERSAO, consentEm:Date.now() };
-  _riscoPending=true;
-  riscoRef(serie).set(doc).then(function(){
-      _riscoPending=false;
-      const b=document.getElementById("btn-risco"); if(b) b.classList.add("on");
-      try{ localStorage.setItem("educa-risco-ok","1"); }catch(e){}
-      alert("✅ Resumo compartilhado. Para desfazer, clique no mesmo botão e escolha Cancelar.");
-    }).catch(function(e){ _riscoPending=false; alert("Não consegui compartilhar: "+(e&&e.message||"erro de conexão")); });
+   Os dados de um aluno moram em CINCO lugares, e é por isso que existe uma
+   lista explícita aqui em vez de um laço genérico: esquecer um deles faz a
+   exclusão virar mentira, que é pior do que não ter o botão.
+     1. users/{uid}                                     — perfil
+     2. users/{uid}/panels (todos)                      — notas, estudos, vestibular
+     3. salas/{sala}/alunos/{uid}                       — matrícula
+     4. salas/{sala}/materias/{m}/notas/{uid}           — projeção (B1)
+     5. salas/{sala}/materias/{m}/transicoes deste uid  — trilha de faixa (D1)
+   Mais o `risco` legado, enquanto existir.
+
+   (Os caminhos acima estão com {m} e não com asterisco de propósito: um
+    asterisco seguido de barra fecharia este comentário no meio.) */
+function _minhaSala(){
+  if(!(window.EP && window.Escola)) return null;
+  return Escola.salaId(window.EP.serie, window.EP.turma);
 }
-function revogarRisco(serie){
-  _riscoPending=true;
-  riscoRef(serie).delete().then(function(){
-    _riscoPending=false;
-    const b=document.getElementById("btn-risco"); if(b) b.classList.remove("on");
-    try{ localStorage.removeItem("educa-risco-ok"); }catch(e){}
-    alert("✅ Compartilhamento desfeito. Seu resumo foi apagado e a escola não vê mais.");
-  }).catch(function(e){ _riscoPending=false; alert("Não consegui desfazer: "+(e&&e.message||"erro")); });
+function _materiaIds(){
+  return (window.Escola ? Escola.MATERIAS : []).map(function(m){ return m.id; });
 }
-function riscoUI(){
-  const b=document.getElementById("btn-risco"); if(!b) return;
+
+function baixarMeusDados(){
+  if(!(window.Cloud && Cloud.user && Cloud.firestore && Cloud.firestore())){
+    alert("Entre na sua conta primeiro — é ela que identifica quais dados são seus.");
+    return;
+  }
+  const db = Cloud.firestore(), uid = Cloud.user.uid, sala = _minhaSala();
+  const pacote = {
+    geradoEm: new Date().toISOString(),
+    sobre: "Cópia dos seus dados no Estuda+ (LGPD art. 18, portabilidade).",
+    conta: { uid: uid, email: Cloud.user.email || null, nome: Cloud.user.displayName || null },
+    perfil: null, paineis: {}, matricula: null, projecaoPorMateria: {}, mudancasDeFaixa: [],
+    resumoDeRiscoLegado: null,
+    esteAparelho: {}
+  };
+  // o que está só neste aparelho também é dado dele — vai junto
   try{
-    const ok=localStorage.getItem("educa-risco-ok")==="1";
-    b.classList.toggle("on", ok);
-    b.title = ok ? "Resumo compartilhado com professores ✓ (clique p/ atualizar)" : "Compartilhar resumo de risco com professores (opt-in)";
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf("painel-")===0) pacote.esteAparelho[k] = localStorage.getItem(k);
+    }
   }catch(e){}
+
+  const raiz = sala ? db.collection("schools").doc(Cloud.school()).collection("salas").doc(sala) : null;
+  const tarefas = [
+    db.collection("users").doc(uid).get()
+      .then(function(s){ if(s.exists) pacote.perfil = s.data(); }).catch(function(){}),
+    db.collection("users").doc(uid).collection("panels").get()
+      .then(function(q){ q.docs.forEach(function(d){ pacote.paineis[d.id] = d.data(); }); }).catch(function(){})
+  ];
+  if(raiz){
+    tarefas.push(raiz.collection("alunos").doc(uid).get()
+      .then(function(s){ if(s.exists) pacote.matricula = s.data(); }).catch(function(){}));
+    _materiaIds().forEach(function(mid){
+      tarefas.push(raiz.collection("materias").doc(mid).collection("notas").doc(uid).get()
+        .then(function(s){ if(s.exists) pacote.projecaoPorMateria[mid] = s.data(); }).catch(function(){}));
+      tarefas.push(raiz.collection("materias").doc(mid).collection("transicoes").where("uid","==",uid).get()
+        .then(function(q){ q.docs.forEach(function(d){
+          const o = d.data(); o.materia = mid; pacote.mudancasDeFaixa.push(o);
+        }); }).catch(function(){}));
+    });
+  }
+  tarefas.push(db.collection("schools").doc(Cloud.school()).collection("series")
+    .doc(String((window.EP && window.EP.serie) || "3")).collection("risco").doc(uid).get()
+    .then(function(s){ if(s.exists) pacote.resumoDeRiscoLegado = s.data(); }).catch(function(){}));
+
+  Promise.all(tarefas).then(function(){
+    pacote.mudancasDeFaixa.sort(function(a,b){ return (a.quando||0)-(b.quando||0); });
+    const blob = new Blob([JSON.stringify(pacote,null,2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = "estuda-mais-meus-dados.json"; a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+function apagarMeusDados(){
+  if(!(window.Cloud && Cloud.user && Cloud.firestore && Cloud.firestore())){
+    alert("Entre na sua conta primeiro — é ela que identifica quais dados são seus.");
+    return;
+  }
+  if(!confirm(
+    "APAGAR TODOS OS SEUS DADOS DO ESTUDA+\n\n" +
+    "Some para sempre, e não dá para desfazer:\n" +
+    "• suas notas, seu painel de estudos e seu vestibular\n" +
+    "• seu perfil e sua matrícula na turma\n" +
+    "• o que os seus professores veem sobre você\n\n" +
+    "As notas na plataforma oficial da escola NÃO são afetadas.\n\n" +
+    "Dica: cancele e use antes o botão de baixar os seus dados.\n\nApagar mesmo?")) return;
+  if(!confirm("Última confirmação. Apagar tudo agora?")) return;
+
+  const db = Cloud.firestore(), uid = Cloud.user.uid, sala = _minhaSala();
+  const raiz = sala ? db.collection("schools").doc(Cloud.school()).collection("salas").doc(sala) : null;
+  const nada = function(){};
+  const passos = [];
+
+  if(raiz){
+    _materiaIds().forEach(function(mid){
+      passos.push(raiz.collection("materias").doc(mid).collection("notas").doc(uid).delete().catch(nada));
+      passos.push(raiz.collection("materias").doc(mid).collection("transicoes").where("uid","==",uid).get()
+        .then(function(q){ return Promise.all(q.docs.map(function(d){ return d.ref.delete().catch(nada); })); })
+        .catch(nada));
+    });
+    passos.push(raiz.collection("alunos").doc(uid).delete().catch(nada));
+  }
+  passos.push(db.collection("schools").doc(Cloud.school()).collection("series")
+    .doc(String((window.EP && window.EP.serie) || "3")).collection("risco").doc(uid).delete().catch(nada));
+  passos.push(db.collection("users").doc(uid).collection("panels").get()
+    .then(function(q){ return Promise.all(q.docs.map(function(d){ return d.ref.delete().catch(nada); })); })
+    .catch(nada));
+
+  /* Ordem importa: o perfil é o ÚLTIMO documento da nuvem a cair. Enquanto ele
+     existe, o app sabe quem é a pessoa e consegue achar o resto; apagá-lo
+     primeiro deixaria os outros quatro lugares órfãos e inalcançáveis. */
+  Promise.all(passos)
+    .then(function(){ return db.collection("users").doc(uid).delete().catch(nada); })
+    .then(function(){
+      // o localStorage vem depois da nuvem: é ele que guarda a série e a turma
+      // usadas para montar os caminhos acima.
+      try{
+        const fora = [];
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(k && (k.indexOf("painel-")===0 || k.indexOf("educa-")===0 || k.indexOf("cloud:")===0)) fora.push(k);
+        }
+        fora.forEach(function(k){ localStorage.removeItem(k); });
+      }catch(e){}
+      /* Por fim a conta de login. Pode recusar com `auth/requires-recent-login`
+         se a sessão for antiga — e nesse caso os DADOS já foram apagados, que
+         é o que a LGPD exige; sobra a credencial vazia. Dizemos isso em vez de
+         fingir que deu tudo certo. */
+      return Cloud.user.delete().then(function(){ return "conta"; })
+        .catch(function(){ return "dados"; });
+    })
+    .then(function(oQue){
+      alert(oQue === "conta"
+        ? "✅ Tudo apagado, inclusive a sua conta de login."
+        : "✅ Seus dados foram apagados.\n\nA conta de login continuou de pé porque a sua sessão é antiga — entre de novo e repita se quiser removê-la também.");
+      try{ Cloud.logout(); }catch(e){}
+      location.href = "index.html";
+    })
+    .catch(function(e){
+      alert("Não consegui apagar tudo: " + (e && e.message || "erro de conexão") + "\n\nNada foi apagado pela metade sem aviso — tente de novo com internet estável.");
+    });
 }
 
 /* ---------- relatório mensal em PDF (p/ pais) — jsPDF em app/vendor/jspdf.umd.min.js ---- */
@@ -787,4 +948,4 @@ function s_name(s){ return esc(s.name); }
 
 function renderAll(){ renderCards(); if(document.getElementById("view-evolucao")&&document.getElementById("view-evolucao").classList.contains("active")) renderEvolucao(); }
 
-load(); riscoUI(); renderAll();
+load(); limparRiscoLegado(); renderAll();

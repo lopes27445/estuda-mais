@@ -352,6 +352,33 @@
     buildGate();
     showBoot(); // tela neutra de carregamento até sabermos se já tem sessão — evita "piscar" o login a cada troca de painel
 
+    /* V-12 — App Check. As regras respondem "este usuário pode?"; elas não
+       respondem "esta requisição veio do meu app?". Com a config pública (que
+       é pública por design), um script de fora fala direto com o Firestore:
+       não vira coordenador, mas cria contas em massa, enche a fila de
+       matrícula e queima a cota do Spark.
+
+       Fica desligado até existir a chave do reCAPTCHA v3, que se cria no
+       console (grátis, não precisa de Blaze) — o roteiro está em
+       Estuda+/Passos Manuais no Console.md. Para ligar, basta preencher
+       APPCHECK_SITE_KEY em firebase-config.js: nada mais precisa mudar aqui.
+
+       O SDK é carregado sob demanda de propósito — enquanto a chave estiver
+       vazia, nenhuma página paga o download. */
+    function ativarAppCheck() {
+      var chave = window.APPCHECK_SITE_KEY;
+      if (!chave) return;
+      var s = document.createElement("script");
+      s.src = "https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check-compat.js";
+      s.onload = function () {
+        try {
+          firebase.appCheck().activate(chave, /* refresh automático */ true);
+        } catch (e) { console.warn("[cloud] App Check não ativou:", e && e.message); }
+      };
+      s.onerror = function () { console.warn("[cloud] App Check não carregou."); };
+      document.head.appendChild(s);
+    }
+
     var cfg = window.firebaseConfig;
     if (!cfg || !cfg.apiKey || String(cfg.apiKey).indexOf("PASTE") === 0) {
       showGate("⚙️ App ainda não configurado: falta colar as chaves do Firebase em app/firebase-config.js. (Passo do setup — fale com quem montou o painel.)");
@@ -360,6 +387,7 @@
     }
 
     app = firebase.initializeApp(cfg);
+    ativarAppCheck();
     auth = firebase.auth();
     db = firebase.firestore();
 
@@ -420,15 +448,37 @@
      nenhum com o que a pessoa realmente leciona.
      Continua caindo pra "aluno" em qualquer falha — degradar pra menos poder,
      nunca pra mais. */
+  /* V-10, primeira metade: o poder de dono já pode vir de uma custom claim
+     (`admin: true`) no token, gravada por `tools/set-admin-claim.mjs` com o
+     Admin SDK rodando nesta máquina — não é Cloud Functions e não exige plano
+     pago. A regra do Firestore aceita as duas formas (ver `ehMaster()` lá).
+
+     O e-mail fixo continua ao lado DE PROPÓSITO. Enquanto a claim não estiver
+     valendo num token já renovado, tirá-lo tranca o dono para fora: depois da
+     V-01 só coordenação cadastra staff, e se o documento de coordenação sumir
+     não existe outro caminho de volta. A ordem segura (gerar chave → rodar o
+     script → sair e entrar → conferir → só então apagar o e-mail) está em
+     Estuda+/Passos Manuais no Console.md. */
+  function ehDono() {
+    if (!user) return Promise.resolve(false);
+    if (user.email === MASTER) return Promise.resolve(true);
+    // a claim só aparece em token renovado — por isso o passo "sair e entrar"
+    return user.getIdTokenResult()
+      .then(function (t) { return !!(t && t.claims && t.claims.admin === true); })
+      .catch(function () { return false; });
+  }
+
   function computeRole() {
     var vazio = { role: "aluno", materias: [], salas: [] };
-    if (user.email === MASTER) return Promise.resolve({ role: "coordenacao", materias: [], salas: [] });
-    return db.collection("schools").doc(SCHOOL).collection("staff").doc(user.email).get()
-      .then(function (s) {
-        var d = (s.exists && s.data()) || {};
-        return { role: d.role || "aluno", materias: d.materias || [], salas: d.salas || [] };
-      })
-      .catch(function () { return vazio; });
+    return ehDono().then(function (dono) {
+      if (dono) return { role: "coordenacao", materias: [], salas: [] };
+      return db.collection("schools").doc(SCHOOL).collection("staff").doc(user.email).get()
+        .then(function (s) {
+          var d = (s.exists && s.data()) || {};
+          return { role: d.role || "aluno", materias: d.materias || [], salas: d.salas || [] };
+        })
+        .catch(function () { return vazio; });
+    });
   }
 
   function ensureProfile() {

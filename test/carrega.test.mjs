@@ -101,6 +101,63 @@ describe("Carga dos painéis", () => {
   });
 });
 
+/**
+ * Todo `onclick="fn()"` tem um `fn` de verdade do outro lado?
+ *
+ * O teste acima prova que o script chega vivo. Este prova a outra metade do
+ * mesmo sintoma: o HTML chama pelo nome, e nada avisa quando o nome muda ou
+ * some do JS. Para quem usa, os dois defeitos são idênticos — "clico e não
+ * acontece nada" — e nenhum deles aparece no console de quem publicou.
+ *
+ * Ficou concreto em 05/09/2026: o botão 📤 de compartilhar risco saiu do JS
+ * junto com o B2. Se o `onclick` tivesse ficado no HTML, o botão continuaria
+ * lá, bonito, e morreria em ReferenceError a cada toque.
+ *
+ * Varre as duas fontes de handler: os do arquivo .html e os que o próprio
+ * painel escreve dentro de template string ao montar os cards.
+ */
+/* Comentário também contém `onclick="f('…')"` — em notas.app.js há um
+   explicando a V-06 — e uma varredura ingênua sairia procurando uma função
+   chamada `f`. Some com os comentários antes de varrer. */
+function semComentarios(js) {
+  return js.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
+// `onchange="if(...)"` é código inline legítimo, não uma chamada de handler
+const PALAVRA_RESERVADA = new Set([
+  "if", "for", "while", "switch", "return", "typeof", "function", "catch",
+  "new", "delete", "void", "do", "else", "var", "let", "const", "this", "try"
+]);
+
+function handlersDe(texto) {
+  const re = /on(?:click|change|input|submit)\s*=\s*["'`]\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
+  const nomes = new Set();
+  let m;
+  while ((m = re.exec(texto))) if (!PALAVRA_RESERVADA.has(m[1])) nomes.add(m[1]);
+  return [...nomes];
+}
+
+describe("Handlers do HTML existem no JS do painel", () => {
+  // vêm de outros scripts da página ou do próprio navegador
+  const DE_FORA = new Set(["EducaTheme", "Cloud", "alert", "confirm"]);
+
+  for (const [html, js] of [["notas.html", "notas.app.js"], ["estudos.html", "estudos.app.js"]]) {
+    it(`${html} → ${js}`, () => {
+      const marcacao = readFileSync(new URL("../public/" + html, import.meta.url), "utf8");
+      const codigo = readFileSync(new URL("../public/app/" + js, import.meta.url), "utf8");
+      const nomes = [...new Set([...handlersDe(marcacao), ...handlersDe(semComentarios(codigo))])]
+        .filter((n) => !DE_FORA.has(n));
+
+      assert.ok(nomes.length > 0, "não achei handler nenhum — a varredura quebrou");
+
+      const sonda = nomes.map((n) => `out[${JSON.stringify(n)}] = typeof ${n};`).join("\n");
+      const out = carrega(js, sonda);
+      const faltando = nomes.filter((n) => out[n] !== "function");
+      assert.deepEqual(faltando, [], `handler sem função correspondente em ${js}`);
+    });
+  }
+});
+
 describe("Estudos · itens criados pelo aluno sobrevivem ao reload", () => {
   function saneia(item) {
     const out = carrega("estudos.app.js", "out.saneiaCustom = saneiaCustom;");

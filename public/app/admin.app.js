@@ -52,12 +52,13 @@
       + '<div id="a-filestatus" class="amut" style="margin-bottom:8px"></div>'
       + '<textarea id="a-paste" placeholder="…ou cole aqui o texto do comunicado"></textarea>'
       + '<button class="abtn" id="a-parse">Analisar »</button></div>'
-      + '<div id="a-turmas"></div><div id="a-matriculas"></div><div id="a-risk"></div><div id="a-review"></div><div id="a-published"></div>';
+      + '<div id="a-turmas"></div><div id="a-alertas"></div><div id="a-matriculas"></div><div id="a-risk"></div><div id="a-review"></div><div id="a-published"></div>';
     document.getElementById("a-serie").onchange = function () { serie = this.value; Cloud.setAdminSerie(serie); draft = null; render(); };
     document.getElementById("a-parse").onclick = doParse;
     document.getElementById("a-file").onchange = onFile;
     loadPublished();
-    loadRisco();
+    loadAlertas();
+    loadRiscoLegado();
     loadMatriculas();
     loadTurmas();
   }
@@ -179,7 +180,12 @@
     var host = document.getElementById("a-matriculas"); if (!host) return;
     if (!Cloud.user) { host.innerHTML = ""; return; }
     var ehCoord = window.EP && window.EP.role === "coordenacao";
-    var salas = salasDaSerie();
+    /* Era `salasDaSerie()` — todas as salas da série, para todo mundo. A regra
+       nova nega a leitura das salas fora do escopo do professor, então pedir
+       todas só geraria erro silencioso (o .catch abaixo devolveria vazio) e
+       consultas jogadas fora. Pedir só o que se pode ler é o mesmo princípio
+       que o painel de notas já seguia. */
+    var salas = salasVisiveisDaSerie();
     Promise.all(salas.map(function (s) {
       return db.collection("schools").doc(SCHOOL).collection("salas").doc(s.id)
         .collection("alunos").get()
@@ -243,35 +249,137 @@
       .catch(function (e) { alert("Não consegui salvar: " + (e && e.message || e)); });
   }
 
-  /* ============================ ALUNOS EM RISCO ============================
-     Mostra os resumos IDENTIFICADOS que os alunos optaram por compartilhar no
-     Painel de Notas (botão "Compartilhar resumo com professores" — opt-in,
-     escola não vê nota de quem não autorizou).
-     Fonte: schools/{school}/series/{serie}/risco/{uid}. */
-  function loadRisco() {
-    var host = document.getElementById("a-risk"); if (!host) return;
+  /* ====================== D1 · MUDANÇAS DE FAIXA ===========================
+     Substitui o antigo painel "Alunos em risco", que lia os resumos do opt-in
+     (`series/{serie}/risco`). Aquilo saiu no B2 por duas razões: dependia de o
+     aluno em dificuldade clicar para se expor, e liberava para qualquer
+     professor o resumo de todas as séries.
+
+     O que muda de conceito: o painel antigo mostrava ESTADO ("fulano está em
+     50% da meta"). Estado parado não é notícia — o professor já vê isso na
+     lista de notas logo acima. Aqui é TRANSIÇÃO: quem MUDOU de faixa, e
+     quando. É isso que pede uma conversa esta semana.
+
+     A fonte é `salas/{sala}/materias/{materia}/transicoes`, escrita pelo
+     navegador do aluno junto com a projeção — mesmo escopo da nota, então um
+     professor só recebe alerta das salas e matérias dele. */
+  var ORDEM_FAIXA = { ok: 0, atencao: 1, risco: 2 };
+  var ROTULO_FAIXA = { ok: "tranquilo", atencao: "atenção", risco: "risco" };
+  var COR_FAIXA = { ok: "#2fa64a", atencao: "#ffc24b", risco: "#ff5b6e" };
+
+  function piorou(t) {
+    return (ORDEM_FAIXA[t.para] || 0) > (ORDEM_FAIXA[t.de] || 0);
+  }
+
+  function loadAlertas() {
+    var host = document.getElementById("a-alertas"); if (!host) return;
     if (!Cloud.user) { host.innerHTML = ""; return; }
-    db.collection("schools").doc(Cloud.school()).collection("series").doc(String(serie)).collection("risco")
-      .get().then(function (q) {
-        if (q.empty) {
-          host.innerHTML = '<div class="abox"><h3>🚨 Alunos em risco — ' + serie + 'ª série</h3>'
-            + '<p class="amut">Nenhum aluno compartilhou o resumo ainda. Os alunos ativam em <b>Notas → 📤 → Compartilhar resumo com professores</b>.</p></div>';
-          return;
-        }
-        var rows = q.docs.map(function (d) {
-          var o = d.data();
-          var pct = o.pctMeta || 0;
-          var cls = pct >= 80 ? "#2fa64a" : (pct >= 50 ? "#ffc24b" : "#ff5b6e");
-          return '<div class="apub-row">' + esc(o.nome || "Aluno(a)")
-            + '<span style="margin-left:auto;font-weight:800;color:' + cls + '">' + Math.round(pct) + '% da meta</span></div>';
-        }).join("");
-        var nRisco = q.docs.filter(function (d) { return (d.data().pctMeta || 0) < 50; }).length;
-        host.innerHTML = '<div class="abox"><h3>🚨 Alunos em risco — ' + serie + 'ª série (' + q.docs.length + ' compartilharam' + (nRisco ? ', <b style="color:#ff5b6e">' + nRisco + ' em risco</b>' : '') + ')</h3>'
-          + '<p class="amut">⚠️ Estes dados <b>identificam o aluno</b> (nome e e-mail) e foram compartilhados por escolha dele, em Notas. Use só para acompanhamento pedagógico.</p>'
-          + '<div id="a-risklist">' + rows + '</div></div>';
-      }).catch(function () {
-        host.innerHTML = '<div class="abox"><h3>🚨 Alunos em risco</h3><p class="amut">Não consegui carregar agora.</p></div>';
+    var mats = materiasVisiveis(), salas = salasVisiveisDaSerie();
+    if (!mats.length || !salas.length) { host.innerHTML = ""; return; }
+
+    /* Uma consulta por (sala × matéria) — não há como cruzar subcoleções
+       diferentes numa consulta só no Firestore. Para um professor isso é 1 ou 2
+       matérias em 1 a 3 salas: barato. Para a coordenação, que vê tudo, vira
+       10 × 5 = 50 consultas a cada abertura da tela, e o plano Spark não tem
+       folga para isso — por isso ali o carregamento é sob demanda. */
+    var custo = mats.length * salas.length;
+    if (custo > 12 && !loadAlertas._pedido) {
+      host.innerHTML = '<div class="abox"><h3>🔔 Mudanças de faixa — ' + serie + 'ª série</h3>'
+        + '<p class="amut">Você vê todas as matérias de todas as salas, então esta consulta é pesada '
+        + '(' + custo + " combinações). Carrega quando você pedir, para não gastar cota à toa.</p>"
+        + '<button class="abtn" id="a-alertas-go">🔔 Carregar mudanças de faixa</button></div>';
+      var b = document.getElementById("a-alertas-go");
+      if (b) b.onclick = function () { loadAlertas._pedido = true; loadAlertas(); };
+      return;
+    }
+
+    host.innerHTML = '<div class="abox"><h3>🔔 Mudanças de faixa — ' + serie + 'ª série</h3>'
+      + '<p class="amut">Carregando…</p></div>';
+
+    var pedidos = [];
+    salas.forEach(function (s) {
+      mats.forEach(function (m) {
+        pedidos.push(
+          db.collection("schools").doc(SCHOOL).collection("salas").doc(s.id)
+            .collection("materias").doc(m.id).collection("transicoes")
+            .orderBy("quando", "desc").limit(10).get()
+            .then(function (q) {
+              return q.docs.map(function (d) {
+                var o = d.data(); o._sala = s.id; o._materia = m.nome; return o;
+              });
+            })
+            .catch(function () { return []; })
+        );
       });
+    });
+
+    Promise.all(pedidos).then(function (partes) {
+      var todas = [];
+      partes.forEach(function (p) { todas = todas.concat(p); });
+      todas.sort(function (a, b) { return (b.quando || 0) - (a.quando || 0); });
+
+      var quedas = todas.filter(piorou).slice(0, 30);
+      var subidas = todas.length - todas.filter(piorou).length;
+
+      var corpo;
+      if (!todas.length) {
+        corpo = '<p class="amut">Nenhuma mudança de faixa registrada ainda. '
+          + 'O registro nasce quando o aluno abre o app e a situação dele numa matéria muda de faixa — '
+          + 'não há histórico de antes de 05/09/2026.</p>';
+      } else if (!quedas.length) {
+        corpo = '<p class="amut">✅ Nenhuma queda de faixa. '
+          + (subidas ? subidas + ' mudança(s) registrada(s), todas para melhor.' : '') + '</p>';
+      } else {
+        corpo = quedas.map(function (t) {
+          return '<div class="apub-row" style="display:flex;align-items:center;gap:10px">'
+            + '<span style="min-width:150px">' + esc(t.nome || "Aluno(a)") + '</span>'
+            + '<span class="amut" style="font-size:.8rem">' + esc(t._sala) + ' · ' + esc(t._materia) + '</span>'
+            + '<span style="margin-left:auto;display:flex;align-items:center;gap:10px">'
+            + '<span style="color:' + (COR_FAIXA[t.de] || "#888") + '">' + esc(ROTULO_FAIXA[t.de] || t.de) + '</span>'
+            + '<span class="amut">→</span>'
+            + '<b style="color:' + (COR_FAIXA[t.para] || "#888") + '">' + esc(ROTULO_FAIXA[t.para] || t.para) + '</b>'
+            + '<span class="amut" style="font-size:.72rem;min-width:74px;text-align:right">' + quandoTexto(t.quando) + '</span>'
+            + '</span></div>';
+        }).join("")
+        + '<p class="amut" style="margin-top:12px;font-size:.76rem">'
+        + 'A data é de quando o aluno abriu o app, não de quando a nota mudou na secretaria. '
+        + (subidas ? subidas + ' mudança(s) para melhor não estão listadas.' : '') + '</p>';
+      }
+
+      var titulo = '🔔 Mudanças de faixa — ' + serie + 'ª série'
+        + (quedas.length ? ' (<b style="color:#ff5b6e">' + quedas.length + ' queda(s)</b>)' : '');
+      host.innerHTML = '<div class="abox"><h3>' + titulo + '</h3>' + corpo + '</div>';
+    });
+  }
+
+  /* --------- B2: varrer o que sobrou do opt-in de risco (coordenação) -------
+     O app do aluno apaga o próprio resumo na primeira abertura depois desta
+     versão. Sobra quem não abrir mais o app — aluno que saiu da escola, conta
+     abandonada. Esta é a vassoura para esses. Some da tela quando a coleção
+     estiver vazia, e aí o bloco inteiro pode sair do código. */
+  function loadRiscoLegado() {
+    var host = document.getElementById("a-risk"); if (!host) return;
+    if (!Cloud.user || !(window.EP && window.EP.role === "coordenacao")) { host.innerHTML = ""; return; }
+    db.collection("schools").doc(Cloud.school()).collection("series").doc(String(serie))
+      .collection("risco").get().then(function (q) {
+        if (q.empty) { host.innerHTML = ""; return; }
+        host.innerHTML = '<div class="abox"><h3>🧹 Resumos antigos a apagar — ' + serie + 'ª série</h3>'
+          + '<p class="amut">O compartilhamento manual de risco foi desativado (ele falhava justamente '
+          + 'com quem estava em risco, porque dependia do aluno clicar). Restam <b>' + q.docs.length
+          + '</b> resumo(s) de alunos que ainda não reabriram o app — quem reabre tem o seu apagado sozinho. '
+          + 'Estes dados não são mais usados por nada.</p>'
+          + '<button class="abtn danger" id="a-risk-purge">🗑️ Apagar os ' + q.docs.length + ' resumos</button></div>';
+        var b = document.getElementById("a-risk-purge");
+        if (b) b.onclick = function () {
+          if (!confirm("Apagar os " + q.docs.length + " resumos antigos desta série? Não tem volta.")) return;
+          b.disabled = true; b.textContent = "Apagando…";
+          Promise.all(q.docs.map(function (d) { return d.ref.delete().catch(function () {}); }))
+            .then(function () {
+              auditar("risco:purga", String(serie), q.docs.length + " resumo(s)");
+              loadRiscoLegado();
+            });
+        };
+      }).catch(function () { host.innerHTML = ""; });
   }
 
   function doParse() {
