@@ -66,6 +66,34 @@ describe("Gabaritos · integridade de todas as edições", () => {
               `${vs[i]} e ${vs[j]} têm o mesmo gabarito`);
       });
 
+      it("versões da MESMA prova são permutações umas das outras", () => {
+        /* As versões de uma prova são as mesmas questões em ordem trocada.
+           Logo a CONTA DE CADA LETRA tem que bater exatamente entre elas —
+           mesmo número de A, de B, de anuladas. Se não bater, ou a extração
+           saiu torta, ou alguém colou uma chave de outro ano aqui dentro.
+           Nenhuma das duas coisas aparece na tela: o app corrige numa boa e
+           devolve um número errado.
+
+           `grupo` separa edições que tiveram MAIS DE UMA prova. A UNICAMP 2021
+           é o caso: a 1ª fase foi partida em dois dias, com provas diferentes
+           por área, então as chaves do dia 1 não têm por que bater com as do
+           dia 2 — são provas distintas, não versões da mesma. */
+        const porGrupo = {};
+        for (const v of G.versoesDe(ed)) {
+          const g = ed.versoes[v].grupo || "unico";
+          (porGrupo[g] = porGrupo[g] || []).push(v);
+        }
+        const conta = (s) => s.split("").sort().join("");
+        for (const [g, vs] of Object.entries(porGrupo)) {
+          const ref = conta(chave(ed, vs[0]));
+          for (const v of vs.slice(1)) {
+            assert.equal(conta(chave(ed, v)), ref,
+              `${v} não é permutação de ${vs[0]} (grupo "${g}") — ` +
+              `distribuição de letras diferente`);
+          }
+        }
+      });
+
       it("gabarito inteiro na própria versão dá nota cheia", () => {
         for (const v of G.versoesDe(ed)) {
           const resp = chave(ed, v).split("").map((c) => (c === "*" ? "" : c));

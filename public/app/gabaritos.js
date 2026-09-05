@@ -124,11 +124,18 @@
       inst: "UNICAMP", ano: 2025, fase: "1ª fase", total: 72,
       nome: "UNICAMP 2025 · 1ª fase",
       alternativas: 4,
-      fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2024/10/QZ_gabarito_2025_FINAL_site.pdf",
-      conferido: "29/08/2026",
-      // Questão 53 anulada (Art. 27 da Resolução do Vestibular 2025).
+      fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2024/10/{QZ,RW,SX,TY}_gabarito_2025_FINAL_site.pdf",
+      conferido: "05/09/2026",
+      // 05/09/2026: faltavam TRES dos quatro pares de cadernos. Só o Q/Z
+      // estava carregado, então quem fez R/W, S/X ou T/Y só tinha a opção
+      // errada para escolher — e receberia um número de acertos plausível e
+      // falso, sem nenhum aviso. É o defeito que este arquivo existe para
+      // impedir, e ele estava aqui dentro.
       versoes: {
-        QZ: { rotulo: "Q ou Z", chave: "BBACDBDDBABBABBDCDABDCDBDDBDADBDBABCDADBDCDACCAABAAC*BBBDABADBBDCACCABBD" }
+        QZ: { rotulo: "Q ou Z", chave: "BBACDBDDBABBABBDCDABDCDBDDBDADBDBABCDADBDCDACCAABAAC*BBBDABADBBDCACCABBD" },
+        RW: { rotulo: "R ou W", chave: "CDBDDBDADBDBABCDADBDCDACCAABAAC*BBBDABADBBDCACCABBDBBACDBDDBABBABBDCDABD" },
+        SX: { rotulo: "S ou X", chave: "BCDADBDCDACCAABAAC*BBBDABADBBDCACCABBDBBACDBDDBABBABBDCDABDCDBDDBDADBDBA" },
+        TY: { rotulo: "T ou Y", chave: "BADBBDCACCABBDBCDADBDCDACCAABAAC*BBBDACDBDDBDADBDBABBACDBDDBABBABBDCDABD" }
       },
       multiplas: null,
       assuntos: null
@@ -137,10 +144,34 @@
       inst: "UNICAMP", ano: 2024, fase: "1ª fase", total: 72,
       nome: "UNICAMP 2024 · 1ª fase",
       alternativas: 4,
-      fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2023/10/Q_Y.pdf",
-      conferido: "29/08/2026",
+      fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2023/10/{Q_Y,R_Z,S_W,T_X}.pdf",
+      conferido: "05/09/2026",
+      // Mesmo caso do 2025: três pares de cadernos estavam faltando.
+      // Nenhuma questão anulada nesta edição.
       versoes: {
-        QY: { rotulo: "Q ou Y", chave: "BACADDCCDBCCAABCCDCCDADCBAACDCBACABCABDBDBACBBADCBDCCCDBCCCBBBDCCCDDCBAC" }
+        QY: { rotulo: "Q ou Y", chave: "BACADDCCDBCCAABCCDCCDADCBAACDCBACABCABDBDBACBBADCBDCCCDBCCCBBBDCCCDDCBAC" },
+        RZ: { rotulo: "R ou Z", chave: "CDADCBAACDCBACABCABDBDBACBBADCBDCCCDBCCCBBBDCCCDDCBACBACADDCCDBCCAABCCDC" },
+        SW: { rotulo: "S ou W", chave: "BACADDCCDBCCAABCCDCABCABDBDBACBBACDADCBAACDCBACDCBDCCCDBCCCBBBDCCCDDCBAC" },
+        TX: { rotulo: "T ou X", chave: "DCBDCCCDBCCCBBBDCCCDDCBACABCABDBDBACBBACDADCBAACDCBACBACADDCCDBCCAABCCDC" }
+      },
+      multiplas: null,
+      assuntos: null
+    },
+    {
+      inst: "UNICAMP", ano: 2023, fase: "1ª fase", total: 72,
+      nome: "UNICAMP 2023 · 1ª fase",
+      alternativas: 4,
+      fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2022/11/Gabarito_F1_VEST2023_V2.pdf",
+      conferido: "05/09/2026",
+      // A Comvest publicou este gabarito duas vezes: Gabarito_F1_VEST2023.pdf
+      // em 08/11/2022 e o _V2 no dia seguinte. Vale o V2, que é a retificação.
+      // Uma anulada por caderno, em posição diferente em cada um — escolher o
+      // caderno errado muda o resultado de verdade.
+      versoes: {
+        QZ: { rotulo: "Q ou Z", chave: "BDDBABBBBAACADACBABDCC*AADBDCDDCCCBACCADABABBBDCBCABCABBCBADCAADACBDBCBA" },
+        RY: { rotulo: "R ou Y", chave: "CC*AADBDCDDCCCBACCADABABBBDCBCABCABBCBADCAADACBDBCBABDDBABBBBAACADACBABD" },
+        SX: { rotulo: "S ou X", chave: "BDDBABBBBAACADACBABDCC*AADBDCDDCCCBACBADCAADACBDBCBACCADABABBBDCBCABCABB" },
+        TW: { rotulo: "T ou W", chave: "CBADCAADACBDBCBABDDBABBBBAACADACBABDCCADABABBBDCBCABCABBCC*AADBDCDDCCCBA" }
       },
       multiplas: null,
       assuntos: null
@@ -150,15 +181,40 @@
       nome: "UNICAMP 2022 · 1ª fase",
       alternativas: 4,
       fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2021/11/gabarito_2022_DIVULGA.pdf",
-      conferido: "29/08/2026",
+      conferido: "05/09/2026",
       // 4 pares de cadernos, cada um com ordem própria E anulada própria
-      // (Q/X anulou a 42, R/W a 2, S/Z a 58, T/Y a 26). Escolher o caderno
-      // errado aqui muda o resultado de verdade.
+      // (Q/X anulou a 42, R/W a 2, S/Z a 58, T/Y a 26).
       versoes: {
         QX: { rotulo: "Q ou X", chave: "DABDDCCDBDCADBDACBBCDBACADBBDCAAABACDADBB*DCABCCDAABCCCBCBBCCDBCCCBADCDA" },
         RW: { rotulo: "R ou W", chave: "B*DCABCCDAABCCCBCBBCCDBCCCBADCDADABDDCCDBDCADBDACBBCDBACADBBDCAAABACDADB" },
         SZ: { rotulo: "S ou Z", chave: "ADBBDCAAABACDADBDABDDCCDBDCADBDACBBCDBACCBBCCDBCCCBADCDAB*DCABCCDAABCCCB" },
         TY: { rotulo: "T ou Y", chave: "DABDDCCDBDCADBDACBBCDBACB*DCABCCDAABCCCBADBBDCAAABACDADBCBBCCDBCCCBADCDA" }
+      },
+      multiplas: null,
+      assuntos: null
+    },
+    {
+      inst: "UNICAMP", ano: 2021, fase: "1ª fase", total: 72,
+      nome: "UNICAMP 2021 · 1ª fase",
+      alternativas: 4,
+      fonte: "https://www.comvest.unicamp.br/wp-content/uploads/2021/01/DIA1_gabarito_2021.pdf + DIA2_gabarito_2020.pdf",
+      conferido: "05/09/2026",
+      // Ano da pandemia: a 1ª fase foi partida em DOIS DIAS, com provas
+      // diferentes por área — dia 1 para Humanas/Artes e Exatas/Tecnológicas,
+      // dia 2 para Biológicas e Saúde. Cada candidato fez só um dos dois, e
+      // os cadernos Q/Z, R/Y, S/X e T/W existem SÓ no dia 2. Por isso o id da
+      // versão carrega o dia: sem ele, 'Q ou Z' seria ambíguo entre os anos.
+      // O arquivo do dia 2 se chama DIA2_gabarito_2020.pdf no site da Comvest
+      // — o nome está errado na origem, o conteúdo é do vestibular 2021.
+      versoes: {
+        D1EG: { rotulo: "Dia 1 (Humanas/Exatas) · E ou G", grupo: "dia1", chave: "BBDCAACDCACDBAAAABDCCDACDBACBBACCBDCACADDBDCACABAABBDCDDCCACDAABCDCAABCD" },
+        D1FH: { rotulo: "Dia 1 (Humanas/Exatas) · F ou H", grupo: "dia1", chave: "CDACDBACBBACCBDCACADBBDCAACDCACDBAAAABDCCCACDAABCDCAABCDDBDCACABAABBDCDD" },
+        D1JL: { rotulo: "Dia 1 (Humanas/Exatas) · J ou L", grupo: "dia1", chave: "CCACDAABCDCAABCDBBDCAACDCACDBAAAABDCCDACDBACBBACCBDCACADDBDCACABAABBDCDD" },
+        D1KM: { rotulo: "Dia 1 (Humanas/Exatas) · K ou M", grupo: "dia1", chave: "BBDCAACDCACDBAAAABDCCCACDAABCDCAABCDDBDCACABAABBDCDDCDACDBACBBACCBDCACAD" },
+        D2QZ: { rotulo: "Dia 2 (Biológicas/Saúde) · Q ou Z", grupo: "dia2", chave: "CBDBBBDABACBCDDBBCAACBADBCBBBCCACDBCCACBBCCDBAD*DACBBCBDACBDBACBCCCBDCBA" },
+        D2RY: { rotulo: "Dia 2 (Biológicas/Saúde) · R ou Y", grupo: "dia2", chave: "CBADBCBBBCCACDBCCACBBCCDBAD*DACBBCBDACBDBACBCCCBDCBACBDBBBDABACBCDDBBCAA" },
+        D2SX: { rotulo: "Dia 2 (Biológicas/Saúde) · S ou X", grupo: "dia2", chave: "BCCACDBCCBADBCBBACBDBACBCCCBDCBACACBBCCDBAD*DACBBCBDCBDBBBDABACBCDDBBCAA" },
+        D2TW: { rotulo: "Dia 2 (Biológicas/Saúde) · T ou W", grupo: "dia2", chave: "ACBDBACBCCCBDCBACBADBCBBBCCACDBCCBDBBBDABACBCDDBBCAACACBBCCDBAD*DACBBCBD" }
       },
       multiplas: null,
       assuntos: null
