@@ -396,8 +396,12 @@ service cloud.firestore {
     // Ganho parcial da V-09: tirado o 'murals-lab' (nenhuma página usa) e
     // fechado o formato do post. A migração do mural para dentro de
     // schools/{escola}/ continua pendente e está na nota de auditoria.
+    // Um nome por ambiente (ver public/app/env.js): produção usa 'murals' e
+    // cada lab tem o seu, para que testar num lab não escreva no mural de
+    // outro. A lista é fechada de propósito — sem ela, qualquer coleção de
+    // topo com uma subcoleção `posts` viraria mural.
     function ehMural(col) {
-      return col == 'murals' || col == 'murals-lab2';
+      return col == 'murals' || col == 'murals-lab2' || col == 'murals-lab3';
     }
     match /{col}/{itemId}/posts/{postId} {
       allow read: if signedIn() && ehMural(col);

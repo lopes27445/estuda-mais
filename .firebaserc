@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "painel-e5373"
+  },
+  "targets": {
+    "painel-e5373": {
+      "hosting": {
+        "lab2": [
+          "painel-e5373-lab2"
+        ],
+        "lab3": [
+          "painel-e5373-lab3"
+        ]
+      }
+    }
   }
 }

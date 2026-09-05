@@ -182,7 +182,8 @@
 <meta name="apple-mobile-web-app-title" content="Estuda+">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
-<script>window.LAB=true;window.MURAL_COLL="murals-lab2";window.CLOUD_PANEL={panel:"notas-lab2",keyPrefix:"painel-notas",appScript:"app/notas.app.js"};</script>
+<script src="app/env.js"></script>
+<script>window.CLOUD_PANEL=Ambiente.painel("notas","painel-notas","app/notas.app.js");</script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>

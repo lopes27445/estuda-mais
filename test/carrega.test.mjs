@@ -79,8 +79,90 @@ function carrega(arquivo, extra = "") {
   return out;
 }
 
+/**
+ * O ambiente sai do hostname (app/env.js), e o nome das coleções sai do
+ * ambiente. Isso põe uma regra dura no caminho: **o sufixo de um ambiente que
+ * já tem dados nunca pode mudar.** `notas-lab2` tem que continuar sendo
+ * `notas-lab2` para sempre — trocar o nome não apaga nada, faz coisa pior:
+ * o app abre limpo, como se o aluno nunca tivesse usado, e os dados ficam
+ * numa coleção que ninguém mais lê. Ninguém reporta "sumiu", reportam
+ * "resetou sozinho".
+ *
+ * Estes testes fixam os nomes de cada ambiente conhecido.
+ */
+function ambienteEm(hostname) {
+  const src = readFileSync(new URL("../public/app/env.js", import.meta.url), "utf8");
+  const win = { location: { hostname } };
+  new Function("window", "location", src)(win, win.location);
+  return win;
+}
+
+describe("Ambiente por hostname", () => {
+  const casos = [
+    ["painel-e5373-lab2.web.app", "lab2", true],
+    ["painel-e5373-lab3.web.app", "lab3", true],
+    ["painel-e5373.web.app", "", false],
+    ["painel-e5373.firebaseapp.com", "", false]
+  ];
+
+  for (const [host, id, ehLab] of casos) {
+    it(`${host} → "${id || "produção"}"`, () => {
+      const w = ambienteEm(host);
+      assert.equal(w.Ambiente.id, id);
+      assert.equal(w.LAB, ehLab);
+    });
+  }
+
+  it("lab2 mantém EXATAMENTE os nomes de coleção que já estão em uso", () => {
+    const w = ambienteEm("painel-e5373-lab2.web.app");
+    assert.equal(w.MURAL_COLL, "murals-lab2");
+    assert.equal(w.Ambiente.painel("notas", "painel-notas", "x").panel, "notas-lab2");
+    assert.equal(w.Ambiente.painel("estudos", "painel-estudos", "x").panel, "estudos-lab2");
+    assert.equal(w.Ambiente.painel("vestibular", "vestibular", "x").panel, "vestibular-lab2");
+  });
+
+  it("lab3 grava em coleções próprias — senão não serve para testar nada", () => {
+    const w = ambienteEm("painel-e5373-lab3.web.app");
+    assert.equal(w.MURAL_COLL, "murals-lab3");
+    assert.equal(w.Ambiente.painel("notas", "painel-notas", "x").panel, "notas-lab3");
+  });
+
+  it("produção não leva sufixo — é como as coleções dela já se chamam", () => {
+    const w = ambienteEm("painel-e5373.web.app");
+    assert.equal(w.MURAL_COLL, "murals");
+    assert.equal(w.Ambiente.painel("notas", "painel-notas", "x").panel, "notas");
+  });
+
+  it("host desconhecido cai no lab, nunca em produção", () => {
+    // mandar dado de teste para as coleções de produção é bem pior que
+    // misturá-lo com o lab
+    for (const h of ["localhost", "127.0.0.1", "estuda-mais.com.br", ""]) {
+      const w = ambienteEm(h);
+      assert.equal(w.LAB, true, `${h} não deveria ser produção`);
+      assert.notEqual(w.Ambiente.id, "");
+    }
+  });
+});
+
+describe("Toda página carrega o env.js antes de usar o Ambiente", () => {
+  /* O HTML passou a depender de `Ambiente` no script embutido. Se a tag do
+     env.js não vier ANTES, o script embutido lança ReferenceError, o
+     CLOUD_PANEL nunca é definido e o painel não injeta — a página abre em
+     branco. É o mesmo sintoma do script morto, agora por ordem de tag. */
+  for (const html of ["index.html", "notas.html", "estudos.html", "vestibular.html", "admin.html"]) {
+    it(html, () => {
+      const src = readFileSync(new URL("../public/" + html, import.meta.url), "utf8");
+      const usa = src.indexOf("Ambiente.");
+      if (usa < 0) return; // index e admin não usam o helper, só o env
+      const tag = src.indexOf('src="app/env.js"');
+      assert.ok(tag >= 0, "não carrega o env.js");
+      assert.ok(tag < usa, "env.js vem DEPOIS do primeiro uso de Ambiente");
+    });
+  }
+});
+
 describe("Carga dos painéis", () => {
-  for (const arq of ["estudos.app.js", "notas.app.js", "vestibular.app.js", "admin.app.js"]) {
+  for (const arq of ["env.js", "estudos.app.js", "notas.app.js", "vestibular.app.js", "admin.app.js"]) {
     it(arq + " carrega sem lançar", () => {
       assert.doesNotThrow(() => carrega(arq));
     });

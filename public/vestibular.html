@@ -189,7 +189,8 @@
   .iconbtn:hover{color:var(--red);border-color:var(--red)}
   .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
 </style>
-<script>window.LAB=true;window.MURAL_COLL="murals-lab2";window.CLOUD_PANEL={panel:"vestibular-lab2",keyPrefix:"vestibular",appScript:"app/vestibular.app.js"};</script>
+<script src="app/env.js"></script>
+<script>window.CLOUD_PANEL=Ambiente.painel("vestibular","vestibular","app/vestibular.app.js");</script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
