@@ -1270,6 +1270,21 @@
           return '<option value="' + esc(v) + '">' + esc(Gabaritos.rotuloDe(ed, v)) + '</option>';
         }).join("");
   }
+  /* Aviso de COBERTURA da edição — coisa diferente do aviso de versão logo
+     acima. Aquele diz "escolha a versão certa"; este diz "a sua versão pode
+     nem estar aqui".
+
+     Existe porque em algumas edições a banca publica o gabarito de uma versão
+     só (a UNESP libera a Versão 1; a prova é aplicada em mais de uma). Sem
+     este aviso, quem fez outra versão encontra uma única opção no seletor,
+     escolhe ela por falta de alternativa, e recebe um número de acertos
+     plausível e errado — exatamente o defeito que o gabaritos.js existe para
+     evitar, só que vindo pela porta da lista incompleta em vez da chave
+     errada. */
+  function crNotaHTML(ed) {
+    if (!ed || !ed.nota) return "";
+    return '<div class="hint" style="margin-top:6px;color:var(--gold)">⚠️ ' + esc(ed.nota) + '</div>';
+  }
   function crProgHTML(ed, n) {
     return (n || 0) + " de " + ed.total + " respondidas · deixar em branco vale como erro";
   }
@@ -1298,7 +1313,8 @@
       + '<div class="field"><label>Versão do seu caderno *</label>'
       + '<select id="cr-ver">' + crVersoesHTML(ed) + '</select>'
       + '<div class="hint" style="margin-top:6px">Está impressa na <b>capa do caderno</b>. '
-      + 'A ordem das questões muda de uma versão pra outra — corrigir pela versão errada dá um resultado errado <b>sem avisar</b>.</div></div>'
+      + 'A ordem das questões muda de uma versão pra outra — corrigir pela versão errada dá um resultado errado <b>sem avisar</b>.</div>'
+      + '<div id="cr-nota">' + crNotaHTML(ed) + '</div></div>'
       + '<div class="field"><label>Data em que você fez</label><input id="cr-data" type="date" value="' + todayISO() + '"></div>'
       + '<div class="hint" id="cr-prog">' + crProgHTML(ed, 0) + '</div>'
       + '<div class="cr-grid" id="cr-grid">' + crGridHTML(ed) + '</div>'
@@ -1317,6 +1333,10 @@
       window._cr.resultado = null;
       window._cr.versao = null;
       document.getElementById("cr-ver").innerHTML = crVersoesHTML(nova);
+      // o aviso de cobertura é por edição: trocar a edição tem que trocá-lo,
+      // senão fica o aviso da anterior colado numa prova que não é a dela
+      var elNota = document.getElementById("cr-nota");
+      if (elNota) elNota.innerHTML = crNotaHTML(nova);
       var g = document.getElementById("cr-grid");
       g.innerHTML = crGridHTML(nova); g.scrollTop = 0;
       document.getElementById("cr-prog").innerHTML = crProgHTML(nova, 0);

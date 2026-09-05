@@ -51,6 +51,12 @@ describe("Gabaritos · integridade de todas as edições", () => {
         }
       });
 
+      it("se declara `nota` de cobertura, ela é texto de verdade", () => {
+        if (ed.nota === undefined) return;
+        assert.equal(typeof ed.nota, "string");
+        assert.ok(ed.nota.trim().length > 20, "aviso vago não avisa nada");
+      });
+
       it("toda versão tem rótulo (é o que o aluno confere na capa)", () => {
         for (const v of G.versoesDe(ed)) {
           assert.ok(G.rotuloDe(ed, v), `${v} sem rótulo`);
@@ -102,6 +108,24 @@ describe("Gabaritos · integridade de todas as edições", () => {
           assert.equal(r.erros, 0);
         }
       });
+    });
+  }
+});
+
+describe("Gabaritos · cobertura de versões é declarada", () => {
+  /* A VUNESP aplica a 1ª fase em mais de uma versão, mas publica só a
+     Versão 1. A lista fica legitimamente incompleta — e é justamente por
+     isso que a edição TEM que avisar. Sem o aviso, quem fez outra versão
+     encontra uma opção só no seletor, escolhe por falta de alternativa, e
+     recebe um número plausível e errado.
+
+     Se algum dia entrar aqui a UNESP com todas as versões, este teste é o
+     lembrete de tirar o aviso junto — cobertura completa com aviso de
+     cobertura parcial também é mentira, na direção contrária. */
+  for (const ed of TODAS.filter((e) => e.inst === "UNESP")) {
+    it(`${ed.nome} avisa que só há a Versão 1`, () => {
+      assert.ok(ed.nota, "edição da UNESP sem aviso de cobertura");
+      assert.match(ed.nota, /Vers(ã|a)o 1/);
     });
   }
 });

@@ -224,7 +224,11 @@
       nome: "UNESP 2025 · 1ª fase",
       alternativas: 5,
       fonte: "https://www.curso-objetivo.br/vestibular/resolucao-comentada/unesp/2025/1fase/UNESP2025_1fase_gabarito.pdf",
-      conferido: "29/08/2026",
+      conferido: "05/09/2026",
+      // Documento da própria VUNESP (VNSP2404), espelhado pelo
+      // Objetivo — traz o código interno da banca e o aviso de
+      // confidencialidade, não é lista digitada por terceiro.
+      nota: "Só existe publicado o gabarito da Versão 1. A VUNESP aplica a prova em mais de uma versão, com a ordem das questões trocada — confira na capa do seu caderno antes de corrigir.",
       versoes: {
         1: { rotulo: "Versão 1", chave: "BBCABADECCBEDACABDEEACDBAEEBACDCEBABEEDACBECDABCECDAACEBBDAEACBBEDACBCEDEBCAEADBECDBAEDBCA" }
       },
@@ -236,7 +240,11 @@
       nome: "UNESP 2024 · 1ª fase",
       alternativas: 5,
       fonte: "https://www.curso-objetivo.br/vestibular/resolucao-comentada/unesp/2024/1fase/UNESP2024_1fase_gabarito.pdf",
-      conferido: "29/08/2026",
+      conferido: "05/09/2026",
+      // Documento da própria VUNESP (VNSP2303), espelhado pelo
+      // Objetivo — traz o código interno da banca e o aviso de
+      // confidencialidade, não é lista digitada por terceiro.
+      nota: "Só existe publicado o gabarito da Versão 1. A VUNESP aplica a prova em mais de uma versão, com a ordem das questões trocada — confira na capa do seu caderno antes de corrigir.",
       versoes: {
         1: { rotulo: "Versão 1", chave: "DBCABDCAEDBADCDCBEACDAABDCEEDBAACDBEACEDBBACEDBECABDCEBDECCABAEDCDBEAEDCAEBDCBCDABECADECBD" }
       },
@@ -248,9 +256,53 @@
       nome: "UNESP 2023 · 1ª fase",
       alternativas: 5,
       fonte: "https://www.curso-objetivo.br/vestibular/resolucao-comentada/unesp/2023/1fase/UNESP2023_1fase_gabarito.pdf",
-      conferido: "29/08/2026",
+      conferido: "05/09/2026",
+      // Documento da própria VUNESP (VNSP2206), espelhado pelo
+      // Objetivo — traz o código interno da banca e o aviso de
+      // confidencialidade, não é lista digitada por terceiro.
+      nota: "Só existe publicado o gabarito da Versão 1. A VUNESP aplica a prova em mais de uma versão, com a ordem das questões trocada — confira na capa do seu caderno antes de corrigir.",
       versoes: {
         1: { rotulo: "Versão 1", chave: "AADCABECBAEDCAEBDCBEAADCDBDAECBBEBDACECDCABEADBCADECBDECAAAECBDDABECDEBDCAACDEBCADEECBDCAB" }
+      },
+      multiplas: null,
+      assuntos: null
+    },
+    {
+      inst: "UNESP", ano: 2022, fase: "1ª fase", total: 90,
+      nome: "UNESP 2022 · 1ª fase",
+      alternativas: 5,
+      fonte: "https://www.curso-objetivo.br/vestibular/resolucao_comentada/unesp/2022/1fase/{1dia,2dia}/UNESP2022_1fase_gabarito.pdf",
+      conferido: "05/09/2026",
+      // Documento da própria VUNESP (VNSP2105), espelhado pelo
+      // Objetivo — traz o código interno da banca e o aviso de
+      // confidencialidade, não é lista digitada por terceiro.
+      // Como a UNICAMP 2021, a 1ª fase saiu em DOIS DIAS por área:
+      // 14/11 Biológicas, 15/11 Exatas e Humanidades. São provas
+      // diferentes, não versões da mesma — por isso o `grupo`.
+      nota: "Só existe publicado o gabarito da Versão 1. A VUNESP aplica a prova em mais de uma versão, com a ordem das questões trocada — confira na capa do seu caderno antes de corrigir.",
+      versoes: {
+        BIO1: { rotulo: "Biológicas · Versão 1", grupo: "bio", chave: "ADBCECBADCEACBDBECDABECEABDCEEABDCDAEBDECADBEACBDEBDCADAEDBBBDEABCBDACEEBCADCCEDABBDDCEABE" },
+        EXH1: { rotulo: "Exatas e Humanidades · Versão 1", grupo: "exh", chave: "CAADBABEECADBBBEDACBDBEACDEACBECDDEAACBDEBCAABBECAEACDABCEDAEBBCDAEBCDBAECECABDDECBDBACDEC" }
+      },
+      multiplas: null,
+      assuntos: null
+    },
+    {
+      inst: "UNESP", ano: 2021, fase: "1ª fase", total: 90,
+      nome: "UNESP 2021 · 1ª fase",
+      alternativas: 5,
+      fonte: "https://www.curso-objetivo.br/vestibular/resolucao_comentada/unesp/2021/1fase/{1dia,2dia}/UNESP2021_1fase_gabarito.pdf",
+      conferido: "05/09/2026",
+      // Documento da própria VUNESP (VNSP2006), espelhado pelo
+      // Objetivo — traz o código interno da banca e o aviso de
+      // confidencialidade, não é lista digitada por terceiro.
+      // Também dividida em dois dias: 30/01 Biológicas, 31/01 Exatas e
+      // Humanidades. O arquivo saiu do ar no curso-objetivo; foi obtido
+      // da cópia arquivada, e o PDF é o da própria VUNESP (VNSP2006).
+      nota: "Só existe publicado o gabarito da Versão 1. A VUNESP aplica a prova em mais de uma versão, com a ordem das questões trocada — confira na capa do seu caderno antes de corrigir.",
+      versoes: {
+        BIO1: { rotulo: "Biológicas · Versão 1", grupo: "bio", chave: "ACEBBDAEBCDCAEEEDBECABDEBCAADDEBACBDBDCEDABDECDACABAEBDECAABEDCDCEABEEEDEABDCADEBBCEADDCBE" },
+        EXH1: { rotulo: "Exatas e Humanidades · Versão 1", grupo: "exh", chave: "BDABCEDAEABCDEBACDEBAACCDBDEBACBACDEBBBDBCEADBADCECBDAADCEBDBCAEDBCCCAEDBCEBADCAEBDBACECEA" }
       },
       multiplas: null,
       assuntos: null
