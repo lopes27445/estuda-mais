@@ -80,6 +80,120 @@ function carrega(arquivo, extra = "") {
 }
 
 /**
+ * cloud.js carrega, e o portao de login continua com as tres vistas?
+ *
+ * Ate 09/09/2026 nenhum teste tocava o cloud.js — o arquivo de que TODO o
+ * resto depende para existir. Se ele morre na carga, ninguem entra em lugar
+ * nenhum: nao ha painel, nao ha admin, nao ha nada. E o unico sinal seria um
+ * aluno dizendo "nao abre".
+ *
+ * Junto vai a garantia da correcao do mesmo dia: "Criar conta" e "Esqueci a
+ * senha" precisam LEVAR A ALGUM LUGAR. Antes chamavam a acao direto, sem sair
+ * da tela, e a falta de resposta visivel passava impressao de sistema
+ * quebrado. O teste fixa a existencia das vistas para que ninguem volte ao
+ * comportamento antigo sem perceber.
+ */
+function carregaCloud() {
+  const src = readFileSync(new URL("../public/app/cloud.js", import.meta.url), "utf8");
+  const html = [];
+
+  /* Elemento que GRAVA o innerHTML atribuido, para dar pra inspecionar o que
+     o portao construiu. O elemento() generico do resto do arquivo descarta. */
+  function elGrava() {
+    const el = elemento();
+    Object.defineProperty(el, "innerHTML", {
+      get() { return el._html || ""; },
+      set(v) { el._html = v; html.push(String(v)); }
+    });
+    return el;
+  }
+
+  const { win, ls } = ambiente();
+  const doc = {
+    getElementById: () => elGrava(),
+    querySelector: () => elGrava(),
+    querySelectorAll: () => [],
+    createElement: () => elGrava(),
+    addEventListener() {}, removeEventListener() {},
+    documentElement: elGrava(), body: elGrava(), head: elGrava(),
+    readyState: "complete"
+  };
+
+  /* Firebase de mentira: so o suficiente para o boot() percorrer o caminho
+     inteiro sem explodir. Nao valida comportamento — valida que carrega. */
+  const prom = () => ({ then: (f) => { try { f && f({}); } catch (e) {} return prom(); }, catch: () => prom() });
+  const authFake = {
+    useEmulator() {}, onAuthStateChanged() {}, getRedirectResult: prom,
+    signInWithPopup: prom, signInWithRedirect: prom, signOut: prom,
+    createUserWithEmailAndPassword: prom, signInWithEmailAndPassword: prom,
+    sendPasswordResetEmail: prom, currentUser: null
+  };
+  const colecao = () => ({
+    doc: () => ({ collection: colecao, get: prom, set: prom, delete: prom, onSnapshot() {} }),
+    add: prom, get: prom, orderBy: () => ({ get: prom })
+  });
+  const firebase = {
+    initializeApp: () => ({}),
+    auth: Object.assign(() => authFake, { GoogleAuthProvider: function () {} }),
+    firestore: Object.assign(() => ({ collection: colecao, enablePersistence: prom, useEmulator() {} }),
+                             { FieldValue: { serverTimestamp: () => 0 } })
+  };
+
+  /* O cloud.js registra o service worker e escuta "controllerchange" (e o
+     ambiente generico so tem register). Sem isto o arquivo morre na LINHA 18,
+     antes de qualquer coisa — que e exatamente a classe de bug que este
+     arquivo de teste existe para pegar. */
+  win.navigator = {
+    serviceWorker: {
+      register: () => ({ then: (f) => { try { f && f({ update() {} }); } catch (e) {} return { catch: () => {} }; } }),
+      addEventListener() {}, removeEventListener() {}, controller: null
+    },
+    userAgent: "node", maxTouchPoints: 0, onLine: true
+  };
+
+  win.firebase = firebase;
+  win.location = { hostname: "painel-e5373-lab2.web.app", href: "https://x/", origin: "https://x" };
+  win.firebaseConfig = { projectId: "demo-estuda-mais", apiKey: "x", authDomain: "x" };
+
+  const fn = new Function(
+    "window", "document", "localStorage", "navigator", "firebase", "location",
+    "setInterval", "setTimeout", "clearInterval", "clearTimeout", "alert", "confirm",
+    src
+  );
+  fn(win, doc, ls, win.navigator, firebase, win.location,
+     () => 0, () => 0, () => {}, () => {}, () => {}, () => false);
+
+  return html.join(" ");
+}
+
+describe("cloud.js — o portao de entrada", () => {
+  it("carrega sem explodir", () => {
+    assert.doesNotThrow(() => carregaCloud());
+  });
+
+  it("tem as tres vistas separadas + a de confirmacao", () => {
+    const html = carregaCloud();
+    for (const id of ["cloud-v-login", "cloud-v-signup", "cloud-v-reset", "cloud-v-ok"]) {
+      assert.ok(html.includes(id), `faltou a vista ${id}`);
+    }
+  });
+
+  it("criar conta tem campo de confirmar senha e botao proprio", () => {
+    const html = carregaCloud();
+    assert.ok(html.includes("cloud-su-pass2"), "faltou repetir a senha");
+    assert.ok(html.includes("cloud-su-btn"), "faltou o botao de criar conta");
+    assert.ok(html.includes("cloud-rs-btn"), "faltou o botao de enviar recuperacao");
+  });
+
+  it("da caminho de volta para entrar em toda vista secundaria", () => {
+    const html = carregaCloud();
+    for (const id of ["cloud-su-back", "cloud-rs-back", "cloud-ok-back"]) {
+      assert.ok(html.includes(id), `vista sem volta: ${id}`);
+    }
+  });
+});
+
+/**
  * O ambiente sai do hostname (app/env.js), e o nome das coleções sai do
  * ambiente. Isso põe uma regra dura no caminho: **o sufixo de um ambiente que
  * já tem dados nunca pode mudar.** `notas-lab2` tem que continuar sendo

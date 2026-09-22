@@ -133,6 +133,17 @@
       + "#cloud-gate .gbtn:hover{filter:brightness(.97)}#cloud-gate .gbtn:disabled{opacity:.6;cursor:default}"
       + "#cloud-gate .gerr{color:#ff5b6e;font-size:.82rem;margin-top:14px;line-height:1.5;min-height:1em}"
       + "#cloud-gate .gnote{color:#54637e;font-size:.74rem;margin-top:18px;line-height:1.5}"
+      + "#cloud-gate .gvt{color:#e8eef7;font-size:1.12rem;font-weight:800;margin:2px 0 8px}"
+      + "#cloud-verif{position:fixed;left:12px;right:12px;bottom:12px;z-index:8500;display:none;align-items:center;gap:10px;"
+      + "background:linear-gradient(180deg,#3a2c10,#2b2009);border:1px solid #6b5216;border-radius:12px;padding:10px 12px;"
+      + "color:#ffd88a;font-size:.82rem;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:560px;margin:0 auto}"
+      + "#cloud-verif span{flex:1}"
+      + "#cloud-verif button{background:none;border:1px solid #6b5216;color:#ffd88a;border-radius:8px;padding:5px 9px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}"
+      + "#cloud-verif button:disabled{opacity:.6;cursor:default}"
+      + "#cloud-verif #cloud-verif-x{border:none;font-size:1.1rem;padding:2px 6px}"
+      + "html.light #cloud-verif{background:linear-gradient(180deg,#fff8e6,#fdf3d6);border-color:#e0c477;color:#7a5c10}"
+      + "html.light #cloud-verif button{border-color:#e0c477;color:#7a5c10}"
+      + "#cloud-gate .gok{width:44px;height:44px;border-radius:50%;margin:2px auto 12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;color:#04121a;background:linear-gradient(180deg,#2fa64a,#17833a)}"
       + "#cloud-chip{position:fixed;top:12px;right:12px;z-index:8000;display:none;align-items:center;gap:8px;"
       + "background:rgba(18,26,43,.92);border:1px solid #1e2a40;border-radius:22px;padding:4px 6px 4px 4px;backdrop-filter:blur(4px)}"
       + "#cloud-chip img{width:28px;height:28px;border-radius:50%;flex:none}"
@@ -176,6 +187,7 @@
       + "html.light #cloud-gate h2,html.light #cloud-onboard h2{color:#1a2332}"
       + "html.light #cloud-gate p,html.light #cloud-onboard p{color:#5b6b82}"
       + "html.light #cloud-gate .gerr{color:#d93a4c}html.light #cloud-gate .gnote{color:#7c8ba3}"
+      + "html.light #cloud-gate .gvt{color:#1a2332}"
       + "html.light #cloud-gate .gdiv{color:#9fb0c4}html.light #cloud-gate .gdiv:before,html.light #cloud-gate .gdiv:after{background:#d8e0ea}"
       + "html.light #cloud-gate .ginp{background:#ffffff;border:1px solid #c6d1de;color:#1a2332}html.light #cloud-gate .ginp:focus{border-color:#1b8a3e}"
       + "html.light #cloud-onboard .ob-in{background:#ffffff;border:1px solid #c6d1de;color:#1a2332}"
@@ -205,24 +217,70 @@
       '<div class="gcard">'
       + '<div class="gbrand">' + LOGO + '<div class="gwm">estuda<span>+</span></div></div>'
       + '<div class="gtag">progresso · desempenho · evolução</div>'
-      + '<p id="cloud-gate-msg">Entre para salvar suas notas e estudos na sua conta — em qualquer aparelho.</p>'
-      + '<button class="gbtn" id="cloud-login-btn">'
-      + '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>'
-      + 'Entrar com Google</button>'
-      + '<div class="gdiv"><span>ou com e-mail</span></div>'
-      + '<input class="ginp" id="cloud-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
-      + '<input class="ginp" id="cloud-pass" type="password" placeholder="senha (mín. 6 caracteres)" autocomplete="current-password">'
-      + '<button class="gbtn2" id="cloud-email-btn">Entrar</button>'
-      + '<div class="glinks"><a id="cloud-signup">Criar conta</a><span>·</span><a id="cloud-reset">Esqueci a senha</a></div>'
+
+      /* ---------- vista: ENTRAR ---------- */
+      + '<div id="cloud-v-login">'
+      +   '<p id="cloud-gate-msg">Entre para salvar suas notas e estudos na sua conta — em qualquer aparelho.</p>'
+      +   '<button class="gbtn" id="cloud-login-btn">'
+      +   '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>'
+      +   'Entrar com Google</button>'
+      +   '<div class="gdiv"><span>ou com e-mail</span></div>'
+      +   '<input class="ginp" id="cloud-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
+      +   '<input class="ginp" id="cloud-pass" type="password" placeholder="sua senha" autocomplete="current-password">'
+      +   '<button class="gbtn2" id="cloud-email-btn">Entrar</button>'
+      +   '<div class="glinks"><a id="cloud-signup">Criar conta</a><span>·</span><a id="cloud-reset">Esqueci a senha</a></div>'
+      + '</div>'
+
+      /* ---------- vista: CRIAR CONTA ---------- */
+      + '<div id="cloud-v-signup" style="display:none">'
+      +   '<h3 class="gvt">Criar sua conta</h3>'
+      +   '<p>Sua conta guarda notas, estudos e vestibular na nuvem — dá pra abrir em qualquer aparelho e nada se perde se trocar de celular.</p>'
+      +   '<input class="ginp" id="cloud-su-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
+      +   '<input class="ginp" id="cloud-su-pass" type="password" placeholder="crie uma senha (mín. 6 caracteres)" autocomplete="new-password">'
+      +   '<input class="ginp" id="cloud-su-pass2" type="password" placeholder="repita a senha" autocomplete="new-password">'
+      +   '<button class="gbtn2" id="cloud-su-btn">Criar conta</button>'
+      +   '<div class="glinks"><a id="cloud-su-back">← Já tenho conta, quero entrar</a></div>'
+      + '</div>'
+
+      /* ---------- vista: ESQUECI A SENHA ---------- */
+      + '<div id="cloud-v-reset" style="display:none">'
+      +   '<h3 class="gvt">Recuperar senha</h3>'
+      +   '<p>Digite o e-mail da sua conta. Vou mandar um link para você criar uma senha nova — o link vale por pouco tempo e só funciona uma vez.</p>'
+      +   '<input class="ginp" id="cloud-rs-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
+      +   '<button class="gbtn2" id="cloud-rs-btn">Enviar link de recuperação</button>'
+      +   '<div class="glinks"><a id="cloud-rs-back">← Voltar para entrar</a></div>'
+      + '</div>'
+
+      /* ---------- vista: DEU CERTO ---------- */
+      + '<div id="cloud-v-ok" style="display:none">'
+      +   '<div class="gok">✓</div>'
+      +   '<h3 class="gvt" id="cloud-ok-t"></h3>'
+      +   '<p id="cloud-ok-m"></p>'
+      +   '<button class="gbtn2" id="cloud-ok-back">Voltar para entrar</button>'
+      + '</div>'
+
       + '<div class="gerr" id="cloud-gate-err"></div>'
       + '<div class="gnote">Grátis · seus dados ficam só na sua conta.</div>'
       + '</div>';
     document.body.appendChild(g);
     document.getElementById("cloud-login-btn").addEventListener("click", login);
     document.getElementById("cloud-email-btn").addEventListener("click", function () { emailAuth("login"); });
-    document.getElementById("cloud-signup").addEventListener("click", function () { emailAuth("signup"); });
-    document.getElementById("cloud-reset").addEventListener("click", resetPassword);
     document.getElementById("cloud-pass").addEventListener("keydown", function (e) { if (e.key === "Enter") emailAuth("login"); });
+
+    /* Os dois links abaixo eram a queixa: chamavam a ação DIRETO, sem sair da
+       tela de entrar. Quem clicava em "Criar conta" com os campos vazios via
+       só uma linha vermelha de 12px no rodapé do card — a leitura natural é
+       "o botão não funciona", não "faltou preencher". Agora cada um abre a
+       sua própria vista, com título, explicação e botão próprios. */
+    document.getElementById("cloud-signup").addEventListener("click", function () { vista("signup"); });
+    document.getElementById("cloud-reset").addEventListener("click", function () { vista("reset"); });
+    document.getElementById("cloud-su-back").addEventListener("click", function () { vista("login"); });
+    document.getElementById("cloud-rs-back").addEventListener("click", function () { vista("login"); });
+    document.getElementById("cloud-ok-back").addEventListener("click", function () { vista("login"); });
+    document.getElementById("cloud-su-btn").addEventListener("click", criarConta);
+    document.getElementById("cloud-rs-btn").addEventListener("click", resetPassword);
+    document.getElementById("cloud-su-pass2").addEventListener("keydown", function (e) { if (e.key === "Enter") criarConta(); });
+    document.getElementById("cloud-rs-email").addEventListener("keydown", function (e) { if (e.key === "Enter") resetPassword(); });
 
     var boot = document.createElement("div");
     boot.id = "cloud-boot";
@@ -248,8 +306,14 @@
 
   function showGate(msg) {
     hideBoot();
-    var g = document.getElementById("cloud-gate"); if (g) g.style.display = "flex";
+    var g = document.getElementById("cloud-gate");
+    /* Só reinicia a vista quando o portão estava fechado. Sem esta guarda, um
+       evento de auth chegando depois do "Link enviado" apagaria a confirmação
+       que a pessoa acabou de receber. */
+    var estavaFechado = !g || g.style.display !== "flex";
+    if (g) g.style.display = "flex";
     var c = document.getElementById("cloud-chip"); if (c) c.style.display = "none";
+    if (estavaFechado) { gateBusy(false); vista("login"); }
     if (msg) { var m = document.getElementById("cloud-gate-msg"); if (m) m.textContent = msg; }
   }
   function hideGate() {
@@ -263,7 +327,12 @@
     var b = document.getElementById("cloud-boot"); if (b) b.style.display = "none";
   }
   function gateBusy(b) {
-    var btn = document.getElementById("cloud-login-btn"); if (btn) btn.disabled = b;
+    /* Antes travava só o botão do Google. Criar conta com clique duplo vira
+       "e-mail já em uso" no segundo clique — erro que assusta e não explica. */
+    var ids = ["cloud-login-btn", "cloud-email-btn", "cloud-su-btn", "cloud-rs-btn"];
+    for (var i = 0; i < ids.length; i++) {
+      var btn = document.getElementById(ids[i]); if (btn) btn.disabled = b;
+    }
   }
   function gateErr(t) { var e = document.getElementById("cloud-gate-err"); if (e) e.textContent = t || ""; }
 
@@ -327,21 +396,86 @@
     if (c === "auth/network-request-failed") return "Sem conexão. Verifique a internet.";
     return "Não consegui: " + (e && (e.message || c) || "erro");
   }
+  /* Troca a vista dentro do mesmo card: "login" | "signup" | "reset" | "ok".
+     Mudar de tela é o ponto: o usuário precisa VER que a ação dele levou a
+     algum lugar. Sem isso, clicar num link que só valida campo em silêncio
+     passa a impressão de sistema quebrado. */
+  var VISTAS = ["login", "signup", "reset", "ok"];
+  function vista(qual) {
+    gateErr("");
+    for (var i = 0; i < VISTAS.length; i++) {
+      var el = document.getElementById("cloud-v-" + VISTAS[i]);
+      if (el) el.style.display = (VISTAS[i] === qual) ? "block" : "none";
+    }
+    var foco = { login: "cloud-email", signup: "cloud-su-email", reset: "cloud-rs-email" }[qual];
+    if (foco) { var f = document.getElementById(foco); if (f && f.focus) try { f.focus(); } catch (e) {} }
+  }
+  function vistaOk(titulo, msg) {
+    var t = document.getElementById("cloud-ok-t"); if (t) t.textContent = titulo;
+    var m = document.getElementById("cloud-ok-m"); if (m) m.textContent = msg;
+    vista("ok");
+  }
+
   function emailAuth(mode) {
     var em = (document.getElementById("cloud-email").value || "").trim();
     var pw = (document.getElementById("cloud-pass").value || "");
     if (!em || !pw) { gateErr("Preencha e-mail e senha."); return; }
-    if (mode === "signup" && pw.length < 6) { gateErr("A senha precisa ter pelo menos 6 caracteres."); return; }
     gateErr(""); gateBusy(true);
-    var p = mode === "signup" ? auth.createUserWithEmailAndPassword(em, pw) : auth.signInWithEmailAndPassword(em, pw);
-    p.catch(function (e) { gateBusy(false); gateErr(mapAuthErr(e)); });
+    auth.signInWithEmailAndPassword(em, pw)
+      .catch(function (e) { gateBusy(false); gateErr(mapAuthErr(e)); });
   }
+
+  /* V-02 exige `email_verified` para QUALQUER papel de staff. O app nunca
+     enviava o e-mail de confirmação, então uma coordenadora que criasse conta
+     por e-mail/senha (em vez de Google, que já vem verificado) ficava presa:
+     conta criada, login funcionando, e o painel de Gestão negando tudo para
+     sempre, sem dizer por quê. Aqui o envio passa a fazer parte do cadastro. */
+  function criarConta() {
+    var em = (document.getElementById("cloud-su-email").value || "").trim();
+    var pw = (document.getElementById("cloud-su-pass").value || "");
+    var p2 = (document.getElementById("cloud-su-pass2").value || "");
+    if (!em) { gateErr("Digite seu e-mail."); return; }
+    if (pw.length < 6) { gateErr("A senha precisa ter pelo menos 6 caracteres."); return; }
+    if (pw !== p2) { gateErr("As duas senhas não são iguais."); return; }
+    gateErr(""); gateBusy(true);
+    auth.createUserWithEmailAndPassword(em, pw)
+      .then(function (cred) {
+        // Falha ao enviar não invalida a conta — ela existe e o aluno já entra.
+        // A faixa de aviso dentro do app oferece reenviar.
+        try {
+          if (cred && cred.user && cred.user.sendEmailVerification) return cred.user.sendEmailVerification();
+        } catch (e) {}
+      })
+      .then(function () {
+        gateBusy(false);
+        vistaOk("Conta criada!", "Enviei um e-mail de confirmação para " + em
+          + ". Confirmar não é obrigatório para usar seus painéis, mas é obrigatório para acesso de professor ou coordenação.");
+      })
+      .catch(function (e) { gateBusy(false); gateErr(mapAuthErr(e)); });
+  }
+
   function resetPassword() {
-    var em = (document.getElementById("cloud-email").value || "").trim();
-    if (!em) { gateErr("Digite seu e-mail no campo acima primeiro."); return; }
+    var em = (document.getElementById("cloud-rs-email").value || "").trim();
+    if (!em) { gateErr("Digite o e-mail da sua conta."); return; }
+    gateErr(""); gateBusy(true);
     auth.sendPasswordResetEmail(em)
-      .then(function () { gateErr(""); alert("Enviei um link de redefinição de senha para " + em + ". Olhe sua caixa de entrada (e o spam)."); })
-      .catch(function (e) { gateErr(mapAuthErr(e)); });
+      .then(function () {
+        gateBusy(false);
+        /* Mensagem de propósito igual exista ou não a conta — ver a nota de
+           enumeração de contas na revisão de segurança. Dizer "esse e-mail não
+           tem conta" entrega quem é e quem não é aluno da escola. */
+        vistaOk("Link enviado", "Se existir uma conta com " + em
+          + ", o link de recuperação chega em instantes. Olhe também o spam.");
+      })
+      .catch(function (e) {
+        gateBusy(false);
+        if (e && e.code === "auth/user-not-found") {
+          vistaOk("Link enviado", "Se existir uma conta com " + em
+            + ", o link de recuperação chega em instantes. Olhe também o spam.");
+          return;
+        }
+        gateErr(mapAuthErr(e));
+      });
   }
 
   /* ============================================================
@@ -413,6 +547,45 @@
       gateBusy(false);
     });
 
+  /* Faixa de "confirme seu e-mail".
+     Só aparece para quem entrou por e-mail/senha e ainda não confirmou —
+     quem entra por Google já chega verificado e nunca vê isto.
+
+     Existe porque a consequência é invisível: os painéis do aluno funcionam
+     sem verificação (a regra deles só exige ser o dono), mas TODO papel de
+     staff passa por `verificado()` no firestore.rules. Sem esta faixa, um
+     professor ou coordenador vê o sistema "não funcionar" sem nenhuma pista
+     do motivo — e a causa está a um clique de distância. */
+  function ehSenha(u) {
+    var d = (u && u.providerData) || [];
+    for (var i = 0; i < d.length; i++) if (d[i] && d[i].providerId === "password") return true;
+    return false;
+  }
+  function faixaVerificacao(u) {
+    var f = document.getElementById("cloud-verif");
+    var precisa = u && !u.emailVerified && ehSenha(u);
+    if (!precisa) { if (f) f.style.display = "none"; return; }
+    if (!f) {
+      f = document.createElement("div");
+      f.id = "cloud-verif";
+      f.innerHTML = '<span>Confirme seu e-mail para liberar acesso de professor ou coordenação.</span>'
+        + '<button id="cloud-verif-btn">Reenviar</button>'
+        + '<button id="cloud-verif-x" aria-label="Fechar">×</button>';
+      document.body.appendChild(f);
+      document.getElementById("cloud-verif-x").addEventListener("click", function () { f.style.display = "none"; });
+      document.getElementById("cloud-verif-btn").addEventListener("click", function () {
+        var b = document.getElementById("cloud-verif-btn");
+        var atual = auth.currentUser;
+        if (!atual || !atual.sendEmailVerification) return;
+        if (b) { b.disabled = true; b.textContent = "Enviando…"; }
+        atual.sendEmailVerification()
+          .then(function () { if (b) b.textContent = "Enviado ✓"; })
+          .catch(function () { if (b) { b.disabled = false; b.textContent = "Tentar de novo"; } });
+      });
+    }
+    f.style.display = "flex";
+  }
+
     auth.onAuthStateChanged(function (u) {
       user = u;
       if (!u) { showGate(); return; }
@@ -420,6 +593,7 @@
       var nm = document.getElementById("cloud-chip-name");
       if (img) img.src = u.photoURL || "";
       if (nm) nm.textContent = (u.displayName || u.email || "Você").split(" ")[0];
+      faixaVerificacao(u);
 
       // mantém a tela de carregamento neutra (já visível) até o perfil/dados estarem prontos
       ensureProfile().then(function (profile) {
