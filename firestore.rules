@@ -392,8 +392,94 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    /* ------------------------------ mural -------------------------------- */
-    // Ganho parcial da V-09: tirado o 'murals-lab' (nenhuma página usa) e
+    /* ============ V-09 / A1 — pertencimento a serie e mural novo ==========
+       O mural antigo (logo abaixo) mora na RAIZ do banco, em
+       `{col}/{itemId}/posts/`. Esse caminho nao carrega escola nem serie, entao
+       a regra nao tem o que checar e a condicao inteira vira "esta logado" —
+       qualquer conta criada no mundo le todo recado de toda prova de toda
+       turma. E enumeravel: da pra listar a colecao inteira.
+
+       A correcao e mover o mural para dentro de `schools/`. Ele fica por
+       SERIE (decisao de 22/09/2026) para preservar o comportamento atual: a
+       3aA e a 3aB compartilham o mural de uma prova, porque a prova em si ja
+       e publicada por serie, em `series/{serie}/provas`.
+
+       Isso obriga o documento de pertencimento abaixo. A matricula aprovada
+       mora em `salas/{sala}/alunos/{uid}`, e regra do Firestore nao faz
+       query — sem a sala no caminho nao da pra alcanca-la. `membros/{uid}` e
+       a projecao dessa matricula no nivel da serie, escrita pela coordenacao
+       no mesmo lote da aprovacao.
+
+       Por que nao amarrar em `users/{uid}.serie`: aquele campo e declarado
+       pelo proprio usuario (`camposPerfil()` limita as chaves, nao os
+       valores). Amarrar numa afirmacao do proprio atacante nao e controle. */
+
+    // Escrito SO pela coordenacao, junto da aprovacao da matricula.
+    // O aluno nunca cria o proprio — seria o mesmo furo da autodeclaracao.
+    match /schools/{escola}/series/{serie}/membros/{uid} {
+      allow read: if signedIn() && escolaConhecida(escola)
+                  && (request.auth.uid == uid || ehStaff(escola));
+      allow create, update: if ehCoord(escola)
+                            && request.resource.data.keys().hasOnly(
+                                 ['uid', 'nome', 'sala', 'desde'])
+                            && request.resource.data.uid == uid;
+      // LGPD art. 18: o dono tambem apaga o proprio vinculo.
+      allow delete: if ehCoord(escola) || (signedIn() && request.auth.uid == uid);
+    }
+
+    function membroRef(escola, serie) {
+      return /databases/$(database)/documents/schools/$(escola)/series/$(serie)/membros/$(request.auth.uid);
+    }
+    function ehMembroDaSerie(escola, serie) {
+      return signedIn() && escolaConhecida(escola) && exists(membroRef(escola, serie));
+    }
+
+    // Isolamento por ambiente, igual ao que `ehMural` ja fazia: producao usa
+    // `itens`, cada lab tem o seu. Sem isto, testar no lab3 escreveria no
+    // mural de producao — `series/` nao tem sufixo de ambiente como as
+    // colecoes de painel tem. Lista fechada de proposito.
+    function ehItens(col) {
+      return col == 'itens' || col == 'itens-lab2' || col == 'itens-lab3';
+    }
+
+    match /schools/{escola}/series/{serie}/{itensCol}/{itemId}/posts/{postId} {
+      // Quem le: aluno com matricula APROVADA naquela serie, mais a
+      // coordenacao (moderacao).
+      //
+      // Professor NAO le, e isso e um estreitamento deliberado: hoje ele le
+      // por acidente, porque a regra antiga so pede `signedIn()`. Dar
+      // `ehStaff()` aqui devolveria a QUALQUER professor o mural de TODAS as
+      // series — que e exatamente o vazamento de escopo pelo qual o B2 foi
+      // aposentado. O mural e conteudo escrito por menores; se o professor
+      // precisar dele, entra depois com escopo por sala, nao por atalho.
+      allow read: if ehItens(itensCol)
+                  && (ehMembroDaSerie(escola, serie) || ehCoord(escola));
+
+      allow create: if ehItens(itensCol)
+                    && ehMembroDaSerie(escola, serie)
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.keys().hasOnly(
+                         ['tipo', 'url', 'label', 'texto', 'uid', 'nome', 'createdAt'])
+                    && request.resource.data.createdAt is number;
+
+      // igual ao mural antigo: post nao se edita depois de publicado
+      allow update: if false;
+
+      // o autor apaga o proprio; a coordenacao apaga qualquer um (moderacao
+      // e pedido de exclusao)
+      allow delete: if ehItens(itensCol)
+                    && (resource.data.uid == request.auth.uid || ehCoord(escola));
+    }
+
+    /* -------------- mural ANTIGO (raiz) — EM MIGRACAO, vai sair ---------- */
+    // ESTE e o vazamento A1. Continua aberto DE PROPOSITO ate o cliente novo
+    // estar no ar: fechar aqui antes disso tira o mural dos alunos sem lhes
+    // dar o novo. A sequencia esta em tools/migra-mural/RUNBOOK.md — o passo
+    // que fecha este bloco e o de numero 4, depois do deploy do cliente.
+    //
+    // Substituido por `schools/{escola}/series/{serie}/{itens*}/...` acima.
+    //
+    // Ganho parcial anterior da V-09: tirado o 'murals-lab' (nenhuma página usa) e
     // fechado o formato do post. A migração do mural para dentro de
     // schools/{escola}/ continua pendente e está na nota de auditoria.
     // Um nome por ambiente (ver public/app/env.js): produção usa 'murals' e

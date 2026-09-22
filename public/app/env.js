@@ -58,4 +58,11 @@
   // as duas globais que o cloud.js já lia
   window.LAB = amb.lab;
   window.MURAL_COLL = col("murals");
+
+  /* A1/V-09: o mural saiu da raiz e foi para dentro de
+     `schools/{escola}/series/{serie}/`. O sufixo de ambiente continua
+     obrigatório e agora mora no nome da coleção de itens — `series/` não
+     tem sufixo próprio, então sem isto o lab3 escreveria no mural de
+     produção. Mesma lista fechada que a regra do Firestore valida. */
+  window.ITENS_COLL = col("itens");
 })();

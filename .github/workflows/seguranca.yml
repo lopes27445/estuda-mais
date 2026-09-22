@@ -60,6 +60,20 @@ jobs:
             echo "::error::Script de CDN sem integridade. Auto-hospede em app/vendor/."
             exit 1
           fi
+      - name: Mural não pode voltar para a raiz do banco
+        run: |
+          if grep -rn "collection(window.MURAL_COLL" public/app/cloud.js ; then
+            echo "::error::A1/V-09 de volta: o cliente está lendo o mural na RAIZ do banco. Aquele caminho não tem escola nem série, então a regra libera para qualquer conta logada. Use schools/{escola}/series/{serie}/{itens*}/."
+            exit 1
+          fi
+
+      - name: Mural novo não pode liberar para staff inteiro
+        run: |
+          if grep -n "ehStaff" firestore.rules | grep -q "itens" ; then
+            echo "::error::O mural novo não pode usar ehStaff: daria a QUALQUER professor o mural de TODAS as séries — o mesmo vazamento de escopo pelo qual o B2 foi aposentado."
+            exit 1
+          fi
+
       - name: Cliente não pode gravar campos de autoridade no perfil
         run: |
           if grep -rn "role: role, schoolId: SCHOOL }" public/app/cloud.js ; then

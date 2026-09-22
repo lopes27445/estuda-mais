@@ -392,8 +392,17 @@ function muralLoad(id){
   if(!(window.Cloud&&Cloud.mural)){ const l=document.getElementById("mural-list-"+id); if(l)l.innerHTML='<div class="meta">Entre na sua conta para ver o mural.</div>'; return; }
   Cloud.mural.list(id).then(posts=>{
     const l=document.getElementById("mural-list-"+id); if(l)l.innerHTML=muralPostsHTML(id,posts);
-  }).catch(()=>{
-    const l=document.getElementById("mural-list-"+id); if(l)l.innerHTML='<div class="meta">Não consegui carregar agora (sem conexão?). Tente reabrir.</div>';
+  }).catch(err=>{
+    /* A1: com o mural dentro de schools/, a regra nega leitura de quem ainda
+       não teve a matrícula aprovada. Isso NÃO é falha de rede, e dizer "sem
+       conexão" mandaria o aluno tentar de novo para sempre. */
+    const l=document.getElementById("mural-list-"+id); if(!l)return;
+    const m=err&&err.message;
+    l.innerHTML = m==="SEM_MATRICULA"
+      ? '<div class="meta">Sua matrícula ainda não foi aprovada pela coordenação. O mural abre assim que ela aprovar.</div>'
+      : m==="SEM_SERIE"
+      ? '<div class="meta">Escolha sua série e turma no seu perfil para ver o mural.</div>'
+      : '<div class="meta">Não consegui carregar agora (sem conexão?). Tente reabrir.</div>';
   });
 }
 function muralPostsHTML(id,posts){
@@ -425,7 +434,12 @@ function muralAdd(id,tipo){
   Cloud.mural.add(id,post).then(()=>{
     ["mu-url-","mu-lbl-","mu-txt-"].forEach(p=>{const el=document.getElementById(p+id); if(el){el.value="";el.style.borderColor="";}});
     muralLoad(id);
-  }).catch(()=>alert("Não consegui postar agora. Tente de novo."));
+  }).catch(err=>alert(
+    (err&&err.message)==="SEM_MATRICULA"
+      ? "Sua matrícula ainda não foi aprovada pela coordenação — por isso o mural está fechado."
+      : (err&&err.message)==="SEM_SERIE"
+      ? "Escolha sua série e turma no seu perfil antes de postar."
+      : "Não consegui postar agora. Tente de novo."));
 }
 function muralRemove(id,postId){
   if(!confirm("Remover este material do mural?"))return;

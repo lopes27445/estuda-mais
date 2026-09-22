@@ -39,6 +39,11 @@
   var cache = {};        // shim store: chave -> string (só chaves do painel)
   var saveTimer = null;
   var appInjected = false;
+  /* A1: o mural precisa saber a SERIE do aluno para montar o caminho novo
+     (`schools/{escola}/series/{serie}/...`). Antes o caminho era a raiz e
+     nao dependia de nada; agora depende, e o perfil so existia dentro de
+     ensureProfile(). Guardado aqui para o Cloud.mural alcancar. */
+  var perfilAtual = null;
   var els = {};
 
   /* ---------- util ---------- */
@@ -722,6 +727,7 @@
   }
 
   function afterProfile(profile) {
+    perfilAtual = profile;
     window.EP = profile;
     updateChipRole(profile);
     if (profile.role === "aluno" && profile.serie && profile.turma) {
@@ -977,22 +983,54 @@
           .catch(function (e) { clearTimeout(timer); console.warn("[cloud] flushSync falhou:", e && e.message); fin(); });
       });
     },
-    // Mural compartilhado por item (prova/PC): murals/{itemId}/posts/{postId}
+    /* Mural por item (prova/PC).
+       Caminho NOVO (A1/V-09):
+         schools/{escola}/series/{serie}/{itens*}/{itemId}/posts/{postId}
+
+       O antigo era `murals/{itemId}/posts/` na RAIZ do banco. Aquele caminho
+       nao carregava escola nem serie, entao a regra nao tinha o que checar e
+       liberava para QUALQUER conta logada — era o vazamento A1.
+
+       Agora depende da serie do perfil, e a regra exige `membros/{uid}`, que
+       so a coordenacao escreve. `SEM_SERIE` e `SEM_MATRICULA` existem para a
+       tela poder dizer a verdade em vez de "sem conexao". */
     mural: {
-      _ref: function (itemId) { return db.collection(window.MURAL_COLL || "murals").doc(itemId).collection("posts"); },
+      _ref: function (itemId) {
+        var serie = perfilAtual && perfilAtual.serie;
+        if (!serie) return null;
+        return db.collection("schools").doc(SCHOOL)
+                 .collection("series").doc(String(serie))
+                 .collection(window.ITENS_COLL || "itens").doc(itemId)
+                 .collection("posts");
+      },
       myUid: function () { return user ? user.uid : null; },
       list: function (itemId) {
-        return Cloud.mural._ref(itemId).orderBy("createdAt", "asc").get().then(function (q) {
+        var ref = Cloud.mural._ref(itemId);
+        if (!ref) return Promise.reject(new Error("SEM_SERIE"));
+        return ref.orderBy("createdAt", "asc").get().then(function (q) {
           return q.docs.map(function (d) { var o = d.data(); o.id = d.id; return o; });
+        }).catch(function (e) {
+          // Negacao da regra = matricula ainda nao aprovada. Nao e falha de rede.
+          if (e && e.code === "permission-denied") throw new Error("SEM_MATRICULA");
+          throw e;
         });
       },
       add: function (itemId, post) {
+        var ref = Cloud.mural._ref(itemId);
+        if (!ref) return Promise.reject(new Error("SEM_SERIE"));
         post.uid = user.uid;
         post.nome = (user.displayName || user.email || "Aluno").split(" ")[0];
         post.createdAt = Date.now();
-        return Cloud.mural._ref(itemId).add(post);
+        return ref.add(post).catch(function (e) {
+          if (e && e.code === "permission-denied") throw new Error("SEM_MATRICULA");
+          throw e;
+        });
       },
-      remove: function (itemId, postId) { return Cloud.mural._ref(itemId).doc(postId).delete(); }
+      remove: function (itemId, postId) {
+        var ref = Cloud.mural._ref(itemId);
+        if (!ref) return Promise.reject(new Error("SEM_SERIE"));
+        return ref.doc(postId).delete();
+      }
     }
   };
 

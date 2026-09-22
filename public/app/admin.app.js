@@ -240,8 +240,39 @@
     var p = String(chave).split("|"), sala = p[0], uid = p[1];
     if (!sala || !uid) return;
     if (status === "negado" && !confirm("Negar esta matrícula? O aluno continua usando o app, mas não fica vinculado à turma.")) return;
-    db.collection("schools").doc(SCHOOL).collection("salas").doc(sala).collection("alunos").doc(uid)
-      .set({ status: status, decididoEm: Date.now(), decididoPor: Cloud.user.email }, { merge: true })
+    /* A1/V-09: aprovar matrícula agora escreve DUAS coisas — o status na sala
+       e o vínculo em `series/{serie}/membros/{uid}`, que é o que a regra do
+       mural consulta (regra do Firestore não faz query, então ela não alcança
+       a matrícula que mora sob `salas/`).
+
+       Em LOTE de propósito: as duas ou nenhuma. Se só o status gravasse, o
+       aluno apareceria aprovado na tela e continuaria sem mural — e ninguém
+       ligaria uma coisa na outra. É a mesma lição da V-14, que era publicação
+       de calendário pela metade.
+
+       A série sai do próprio id da sala: `salaId()` monta série + turma
+       ("3A", "3U"), então o primeiro caractere é a série. */
+    var serie = String(sala).charAt(0);
+    var alunoRef = db.collection("schools").doc(SCHOOL)
+                     .collection("salas").doc(sala).collection("alunos").doc(uid);
+    var membroRef = db.collection("schools").doc(SCHOOL)
+                      .collection("series").doc(serie).collection("membros").doc(uid);
+
+    alunoRef.get().then(function (snap) {
+      var nome = (snap.exists && (snap.data() || {}).nome) || "Aluno";
+      var lote = db.batch();
+      lote.set(alunoRef,
+        { status: status, decididoEm: Date.now(), decididoPor: Cloud.user.email },
+        { merge: true });
+      // negar ou revogar TIRA o vínculo — senão o mural continuaria aberto
+      // para quem a coordenação acabou de recusar.
+      if (status === "aprovado") {
+        lote.set(membroRef, { uid: uid, nome: nome, sala: sala, desde: Date.now() });
+      } else {
+        lote.delete(membroRef);
+      }
+      return lote.commit();
+    })
       .then(function () {
         auditar("matricula:" + status, sala + "/" + uid, "");
         loadMatriculas();

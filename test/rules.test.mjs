@@ -750,3 +750,139 @@ describe("D1 · alerta de queda de faixa", () => {
     await assertFails(deleteDoc(doc(profDb, `${trilha(SALA, MAT)}/t1`)));
   });
 });
+
+/* ======== A1 / V-09 — o mural sai da raiz e passa a exigir matrícula ========
+   O mural antigo (`{col}/{itemId}/posts/`) pedia só `signedIn()`: qualquer
+   conta criada no mundo lia todo recado de toda prova de toda turma, e a
+   coleção era enumerável. O caminho não tinha escola nem série, então não
+   havia o que checar.
+
+   Agora ele mora em `schools/{escola}/series/{serie}/{itens*}/{item}/posts/` e
+   a leitura exige `membros/{uid}` — projeção da matrícula APROVADA, escrita
+   só pela coordenação. Amarrar em `users/{uid}.serie` não serviria: aquele
+   campo é declarado pelo próprio usuário. */
+describe("A1 · mural exige matrícula aprovada na série", () => {
+  const SERIE = "3";
+  const ITENS = "itens-lab2";
+  const posts = (serie = SERIE, col = ITENS) =>
+    `schools/${ESCOLA}/series/${serie}/${col}/p1/posts`;
+  const membro = (uid, serie = SERIE) =>
+    `schools/${ESCOLA}/series/${serie}/membros/${uid}`;
+
+  const post = {
+    tipo: "texto", url: "", label: "", texto: "alguém tem o resumo?",
+    uid: "uid-aluno", nome: "Aluno", createdAt: Date.now()
+  };
+
+  async function aprovar(uid = "uid-aluno", serie = SERIE) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), membro(uid, serie)),
+        { uid, nome: "Aluno", sala: serie + "A", desde: Date.now() });
+    });
+  }
+  async function publicado() {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${posts()}/x1`), post);
+    });
+  }
+
+  it("79. A1: conta logada SEM matrícula NÃO lê o mural — era o vazamento", async () => {
+    await publicado();
+    await assertFails(getDocs(collection(alunoDb, posts())));
+  });
+
+  it("80. aluno com matrícula aprovada CONSEGUE ler o mural", async () => {
+    await aprovar();
+    await publicado();
+    await assertSucceeds(getDocs(collection(alunoDb, posts())));
+  });
+
+  it("81. aluno aprovado em OUTRA série NÃO lê o mural desta", async () => {
+    await aprovar("uid-aluno", "2");
+    await publicado();
+    await assertFails(getDocs(collection(alunoDb, posts())));
+  });
+
+  it("82. sem matrícula NÃO publica no mural", async () => {
+    await assertFails(setDoc(doc(alunoDb, `${posts()}/novo`), post));
+  });
+
+  it("83. aluno aprovado CONSEGUE publicar", async () => {
+    await aprovar();
+    await assertSucceeds(setDoc(doc(alunoDb, `${posts()}/novo`), post));
+  });
+
+  it("84. aprovado NÃO publica assinando com o uid de outro", async () => {
+    await aprovar();
+    await assertFails(setDoc(doc(alunoDb, `${posts()}/novo`),
+      Object.assign({}, post, { uid: "uid-outro" })));
+  });
+
+  it("85. aprovado NÃO publica campo fora do formato", async () => {
+    await aprovar();
+    await assertFails(setDoc(doc(alunoDb, `${posts()}/novo`),
+      Object.assign({}, post, { fixado: true })));
+  });
+
+  it("86. post não se edita depois de publicado", async () => {
+    await aprovar();
+    await publicado();
+    await assertFails(setDoc(doc(alunoDb, `${posts()}/x1`),
+      Object.assign({}, post, { texto: "outro" })));
+  });
+
+  it("87. o autor apaga o próprio post", async () => {
+    await aprovar();
+    await publicado();
+    await assertSucceeds(deleteDoc(doc(alunoDb, `${posts()}/x1`)));
+  });
+
+  it("88. aprovado NÃO apaga o post de outro aluno", async () => {
+    await aprovar();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${posts()}/alheio`),
+        Object.assign({}, post, { uid: "uid-outro" }));
+    });
+    await assertFails(deleteDoc(doc(alunoDb, `${posts()}/alheio`)));
+  });
+
+  it("89. coordenação lê o mural — é a moderação", async () => {
+    await publicado();
+    await assertSucceeds(getDocs(collection(coordDb, posts())));
+  });
+
+  it("90. coordenação apaga qualquer post — moderação e pedido de exclusão", async () => {
+    await publicado();
+    await assertSucceeds(deleteDoc(doc(coordDb, `${posts()}/x1`)));
+  });
+
+  it("91. professor NÃO lê o mural (estreitamento deliberado)", async () => {
+    await publicado();
+    await assertFails(getDocs(collection(profDb, posts())));
+  });
+
+  it("92. coleção fora da lista de ambientes não vira mural", async () => {
+    await aprovar();
+    await assertFails(setDoc(doc(alunoDb, `${posts(SERIE, "itens-falso")}/novo`), post));
+  });
+
+  it("93. aluno NÃO cria o próprio vínculo de membro — seria autodeclaração", async () => {
+    await assertFails(setDoc(doc(alunoDb, membro("uid-aluno")),
+      { uid: "uid-aluno", nome: "Aluno", sala: "3A", desde: Date.now() }));
+  });
+
+  it("94. coordenação CONSEGUE aprovar o vínculo", async () => {
+    await assertSucceeds(setDoc(doc(coordDb, membro("uid-aluno")),
+      { uid: "uid-aluno", nome: "Aluno", sala: "3A", desde: Date.now() }));
+  });
+
+  it("95. professor NÃO aprova vínculo", async () => {
+    await assertFails(setDoc(doc(profDb, membro("uid-aluno")),
+      { uid: "uid-aluno", nome: "Aluno", sala: "3A", desde: Date.now() }));
+  });
+
+  it("96. o dono apaga o próprio vínculo — LGPD art. 18", async () => {
+    await aprovar();
+    await assertSucceeds(deleteDoc(doc(alunoDb, membro("uid-aluno"))));
+  });
+});
