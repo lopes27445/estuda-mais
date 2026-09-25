@@ -179,7 +179,7 @@
       + "#cloud-gate .gdiv{display:flex;align-items:center;gap:10px;color:#54637e;font-size:.75rem;margin:16px 0 12px}#cloud-gate .gdiv:before,#cloud-gate .gdiv:after{content:'';flex:1;height:1px;background:#1e2a40}"
       + "#cloud-gate .ginp{width:100%;background:#0c1322;border:1px solid #1e2a40;color:#e8eef7;border-radius:10px;padding:11px 12px;font-size:.95rem;font-family:inherit;margin-bottom:9px}#cloud-gate .ginp:focus{outline:none;border-color:#2fa64a}"
       + "#cloud-gate .gbtn2{width:100%;background:linear-gradient(180deg,#2fa64a,#17833a);color:#04121a;border:none;border-radius:11px;padding:12px;font-size:.98rem;font-weight:800;cursor:pointer;font-family:inherit}#cloud-gate .gbtn2:hover{filter:brightness(1.05)}"
-      + "#cloud-gate .glinks{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:12px;font-size:.82rem}#cloud-gate .glinks a{color:#2fa64a;cursor:pointer;font-weight:600}#cloud-gate .glinks a:hover{text-decoration:underline}#cloud-gate .glinks span{color:#54637e}"
+      + "#cloud-gate .glinks{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:12px;font-size:.82rem}#cloud-gate .glinks a{color:#2fa64a;cursor:pointer;font-weight:600;text-decoration:none}#cloud-gate .glinks a:hover{text-decoration:underline}#cloud-gate .glinks span{color:#54637e}"
       + ".elogo{width:42px;height:42px;flex:none}"
       + ".gbrand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:4px}"
       + ".gwm{font-size:1.7rem;font-weight:800;letter-spacing:-.5px;color:#e8eef7}.gwm span{color:#2fa64a}"
@@ -233,35 +233,12 @@
       +   '<input class="ginp" id="cloud-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
       +   '<input class="ginp" id="cloud-pass" type="password" placeholder="sua senha" autocomplete="current-password">'
       +   '<button class="gbtn2" id="cloud-email-btn">Entrar</button>'
-      +   '<div class="glinks"><a id="cloud-signup">Criar conta</a><span>·</span><a id="cloud-reset">Esqueci a senha</a></div>'
-      + '</div>'
-
-      /* ---------- vista: CRIAR CONTA ---------- */
-      + '<div id="cloud-v-signup" style="display:none">'
-      +   '<h3 class="gvt">Criar sua conta</h3>'
-      +   '<p>Sua conta guarda notas, estudos e vestibular na nuvem — dá pra abrir em qualquer aparelho e nada se perde se trocar de celular.</p>'
-      +   '<input class="ginp" id="cloud-su-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
-      +   '<input class="ginp" id="cloud-su-pass" type="password" placeholder="crie uma senha (mín. 6 caracteres)" autocomplete="new-password">'
-      +   '<input class="ginp" id="cloud-su-pass2" type="password" placeholder="repita a senha" autocomplete="new-password">'
-      +   '<button class="gbtn2" id="cloud-su-btn">Criar conta</button>'
-      +   '<div class="glinks"><a id="cloud-su-back">← Já tenho conta, quero entrar</a></div>'
-      + '</div>'
-
-      /* ---------- vista: ESQUECI A SENHA ---------- */
-      + '<div id="cloud-v-reset" style="display:none">'
-      +   '<h3 class="gvt">Recuperar senha</h3>'
-      +   '<p>Digite o e-mail da sua conta. Vou mandar um link para você criar uma senha nova — o link vale por pouco tempo e só funciona uma vez.</p>'
-      +   '<input class="ginp" id="cloud-rs-email" type="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">'
-      +   '<button class="gbtn2" id="cloud-rs-btn">Enviar link de recuperação</button>'
-      +   '<div class="glinks"><a id="cloud-rs-back">← Voltar para entrar</a></div>'
-      + '</div>'
-
-      /* ---------- vista: DEU CERTO ---------- */
-      + '<div id="cloud-v-ok" style="display:none">'
-      +   '<div class="gok">✓</div>'
-      +   '<h3 class="gvt" id="cloud-ok-t"></h3>'
-      +   '<p id="cloud-ok-m"></p>'
-      +   '<button class="gbtn2" id="cloud-ok-back">Voltar para entrar</button>'
+      /* Criar conta e recuperar senha têm PÁGINA PRÓPRIA (conta.html) desde
+         25/09/2026 — antes eram vistas que trocavam dentro deste card, e na
+         produção nem isso. `volta` diz para onde retornar depois; a página
+         só aceita nomes da lista dela (ver voltaSegura em conta.js). */
+      +   '<div class="glinks"><a id="cloud-signup" href="' + contaHref("criar") + '">Criar conta</a><span>·</span>'
+      +   '<a id="cloud-reset" href="' + contaHref("recuperar") + '">Esqueci a senha</a></div>'
       + '</div>'
 
       + '<div class="gerr" id="cloud-gate-err"></div>'
@@ -271,21 +248,14 @@
     document.getElementById("cloud-login-btn").addEventListener("click", login);
     document.getElementById("cloud-email-btn").addEventListener("click", function () { emailAuth("login"); });
     document.getElementById("cloud-pass").addEventListener("keydown", function (e) { if (e.key === "Enter") emailAuth("login"); });
-
-    /* Os dois links abaixo eram a queixa: chamavam a ação DIRETO, sem sair da
-       tela de entrar. Quem clicava em "Criar conta" com os campos vazios via
-       só uma linha vermelha de 12px no rodapé do card — a leitura natural é
-       "o botão não funciona", não "faltou preencher". Agora cada um abre a
-       sua própria vista, com título, explicação e botão próprios. */
-    document.getElementById("cloud-signup").addEventListener("click", function () { vista("signup"); });
-    document.getElementById("cloud-reset").addEventListener("click", function () { vista("reset"); });
-    document.getElementById("cloud-su-back").addEventListener("click", function () { vista("login"); });
-    document.getElementById("cloud-rs-back").addEventListener("click", function () { vista("login"); });
-    document.getElementById("cloud-ok-back").addEventListener("click", function () { vista("login"); });
-    document.getElementById("cloud-su-btn").addEventListener("click", criarConta);
-    document.getElementById("cloud-rs-btn").addEventListener("click", resetPassword);
-    document.getElementById("cloud-su-pass2").addEventListener("keydown", function (e) { if (e.key === "Enter") criarConta(); });
-    document.getElementById("cloud-rs-email").addEventListener("keydown", function (e) { if (e.key === "Enter") resetPassword(); });
+    /* leva o e-mail já digitado para a página de conta — por sessionStorage,
+       nunca pela URL (endereço fica em histórico, log e Referer) */
+    ["cloud-signup", "cloud-reset"].forEach(function (id) {
+      document.getElementById(id).addEventListener("click", function () {
+        var em = (document.getElementById("cloud-email").value || "").trim();
+        try { if (em) sessionStorage.setItem("conta-email", em); } catch (e) {}
+      });
+    });
 
     var boot = document.createElement("div");
     boot.id = "cloud-boot";
@@ -334,7 +304,7 @@
   function gateBusy(b) {
     /* Antes travava só o botão do Google. Criar conta com clique duplo vira
        "e-mail já em uso" no segundo clique — erro que assusta e não explica. */
-    var ids = ["cloud-login-btn", "cloud-email-btn", "cloud-su-btn", "cloud-rs-btn"];
+    var ids = ["cloud-login-btn", "cloud-email-btn"];
     for (var i = 0; i < ids.length; i++) {
       var btn = document.getElementById(ids[i]); if (btn) btn.disabled = b;
     }
@@ -401,24 +371,27 @@
     if (c === "auth/network-request-failed") return "Sem conexão. Verifique a internet.";
     return "Não consegui: " + (e && (e.message || c) || "erro");
   }
-  /* Troca a vista dentro do mesmo card: "login" | "signup" | "reset" | "ok".
-     Mudar de tela é o ponto: o usuário precisa VER que a ação dele levou a
-     algum lugar. Sem isso, clicar num link que só valida campo em silêncio
-     passa a impressão de sistema quebrado. */
-  var VISTAS = ["login", "signup", "reset", "ok"];
-  function vista(qual) {
+  /* O card agora tem só a vista de entrar — criar conta e recuperar senha
+     vivem em conta.html. Mantido o nome `vista` porque showGate() o chama. */
+  function vista() {
     gateErr("");
-    for (var i = 0; i < VISTAS.length; i++) {
-      var el = document.getElementById("cloud-v-" + VISTAS[i]);
-      if (el) el.style.display = (VISTAS[i] === qual) ? "block" : "none";
-    }
-    var foco = { login: "cloud-email", signup: "cloud-su-email", reset: "cloud-rs-email" }[qual];
-    if (foco) { var f = document.getElementById(foco); if (f && f.focus) try { f.focus(); } catch (e) {} }
+    var el = document.getElementById("cloud-v-login"); if (el) el.style.display = "block";
   }
-  function vistaOk(titulo, msg) {
-    var t = document.getElementById("cloud-ok-t"); if (t) t.textContent = titulo;
-    var m = document.getElementById("cloud-ok-m"); if (m) m.textContent = msg;
-    vista("ok");
+  /* Página atual, se for uma das que conta.html aceita como retorno. */
+  function contaHref(aba) {
+    var pag = String((location.pathname || "").split("/").pop() || "index.html");
+    if (!/^(index|notas|estudos|vestibular|admin)\.html$/.test(pag)) pag = "index.html";
+    return "conta.html?volta=" + encodeURIComponent(pag) + "#" + aba;
+  }
+  /* Link dos e-mails volta para o app — só em domínio do próprio projeto, e
+     sem retorno se o Firebase recusar o domínio (ver conta.js). */
+  function enviaVerificacao(u) {
+    var h = location.hostname || "";
+    var s = /^painel-e5373(-[a-z0-9-]+)?\.(web\.app|firebaseapp\.com)$/.test(h) ? { url: location.origin + "/index.html" } : undefined;
+    return u.sendEmailVerification(s).catch(function (e) {
+      if (s && /continue-uri|unauthorized-domain|argument-error/.test((e && e.code) || "")) return u.sendEmailVerification();
+      throw e;
+    });
   }
 
   function emailAuth(mode) {
@@ -430,58 +403,9 @@
       .catch(function (e) { gateBusy(false); gateErr(mapAuthErr(e)); });
   }
 
-  /* V-02 exige `email_verified` para QUALQUER papel de staff. O app nunca
-     enviava o e-mail de confirmação, então uma coordenadora que criasse conta
-     por e-mail/senha (em vez de Google, que já vem verificado) ficava presa:
-     conta criada, login funcionando, e o painel de Gestão negando tudo para
-     sempre, sem dizer por quê. Aqui o envio passa a fazer parte do cadastro. */
-  function criarConta() {
-    var em = (document.getElementById("cloud-su-email").value || "").trim();
-    var pw = (document.getElementById("cloud-su-pass").value || "");
-    var p2 = (document.getElementById("cloud-su-pass2").value || "");
-    if (!em) { gateErr("Digite seu e-mail."); return; }
-    if (pw.length < 6) { gateErr("A senha precisa ter pelo menos 6 caracteres."); return; }
-    if (pw !== p2) { gateErr("As duas senhas não são iguais."); return; }
-    gateErr(""); gateBusy(true);
-    auth.createUserWithEmailAndPassword(em, pw)
-      .then(function (cred) {
-        // Falha ao enviar não invalida a conta — ela existe e o aluno já entra.
-        // A faixa de aviso dentro do app oferece reenviar.
-        try {
-          if (cred && cred.user && cred.user.sendEmailVerification) return cred.user.sendEmailVerification();
-        } catch (e) {}
-      })
-      .then(function () {
-        gateBusy(false);
-        vistaOk("Conta criada!", "Enviei um e-mail de confirmação para " + em
-          + ". Confirmar não é obrigatório para usar seus painéis, mas é obrigatório para acesso de professor ou coordenação.");
-      })
-      .catch(function (e) { gateBusy(false); gateErr(mapAuthErr(e)); });
-  }
-
-  function resetPassword() {
-    var em = (document.getElementById("cloud-rs-email").value || "").trim();
-    if (!em) { gateErr("Digite o e-mail da sua conta."); return; }
-    gateErr(""); gateBusy(true);
-    auth.sendPasswordResetEmail(em)
-      .then(function () {
-        gateBusy(false);
-        /* Mensagem de propósito igual exista ou não a conta — ver a nota de
-           enumeração de contas na revisão de segurança. Dizer "esse e-mail não
-           tem conta" entrega quem é e quem não é aluno da escola. */
-        vistaOk("Link enviado", "Se existir uma conta com " + em
-          + ", o link de recuperação chega em instantes. Olhe também o spam.");
-      })
-      .catch(function (e) {
-        gateBusy(false);
-        if (e && e.code === "auth/user-not-found") {
-          vistaOk("Link enviado", "Se existir uma conta com " + em
-            + ", o link de recuperação chega em instantes. Olhe também o spam.");
-          return;
-        }
-        gateErr(mapAuthErr(e));
-      });
-  }
+  /* V-02 exige `email_verified` para QUALQUER papel de staff — por isso o
+     cadastro (agora em conta.js) já manda a confirmação, e a faixa
+     `faixaVerificacao` abaixo oferece reenviar. */
 
   /* ============================================================
      BOOT
@@ -528,6 +452,10 @@
     app = firebase.initializeApp(cfg);
     ativarAppCheck();
     auth = firebase.auth();
+    /* Sem isto o Firebase manda confirmação e redefinição de senha no modelo
+       em INGLÊS (o idioma padrão do projeto é "en") — de um remetente que o
+       aluno não conhece, com cara de golpe. */
+    auth.languageCode = "pt-BR";
     db = firebase.firestore();
 
     // Modo emulador local (projectId "demo-*"): testa sem projeto real.
@@ -583,7 +511,7 @@
         var atual = auth.currentUser;
         if (!atual || !atual.sendEmailVerification) return;
         if (b) { b.disabled = true; b.textContent = "Enviando…"; }
-        atual.sendEmailVerification()
+        enviaVerificacao(atual)
           .then(function () { if (b) b.textContent = "Enviado ✓"; })
           .catch(function () { if (b) { b.disabled = false; b.textContent = "Tentar de novo"; } });
       });

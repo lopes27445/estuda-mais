@@ -136,9 +136,15 @@
           .map(function (o) {
             var cor = o.status === "risco" ? "#ff5b6e" : (o.status === "atencao" ? "#ffc24b" : "#2fa64a");
             var rot = o.status === "risco" ? "risco" : (o.status === "atencao" ? "atenção" : "ok");
-            var meds = (o.medias || []).map(function (m, i) {
+            /* `medias` é gravado pelo NAVEGADOR DO ALUNO. Antes entrava cru no
+               HTML: um aluno que gravasse texto com <img onerror> no lugar do
+               número executava script na sessão de quem abrisse esta tela —
+               professor ou coordenação, que podem cadastrar staff. Aqui só
+               passa número; qualquer outra coisa vira "—". */
+            var meds = (Array.isArray(o.medias) ? o.medias.slice(0, 4) : []).map(function (m, i) {
+              var n = (typeof m === "number" && isFinite(m)) ? String(Math.round(m * 100) / 100).replace(".", ",") : "—";
               return '<span title="' + (i + 1) + 'º bim" style="display:inline-block;min-width:30px;text-align:center">'
-                + (m == null ? "—" : String(m).replace(".", ",")) + '</span>';
+                + esc(n) + '</span>';
             }).join("");
             return '<div class="apub-row" style="display:flex;align-items:center;gap:10px">'
               + '<span style="min-width:150px">' + esc(o.nome || "Aluno(a)") + '</span>'

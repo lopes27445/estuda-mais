@@ -143,18 +143,48 @@
       { label: "✅ Gabarito geral", url: "https://vestibular.puc-campinas.edu.br/wp-content/uploads/2024/09/GABARITO_PROVA_GERAL_DEMAIS_CURSOS_VESTIBULAR_2021.pdf" }
     ]
   };
-  // UNESP e Mackenzie: prova/gabarito com nome de arquivo previsível por ano/fase.
+  /* UNESP e Mackenzie: PDFs do acervo do Curso Objetivo.
+     Antes isto era UMA fórmula para todos os anos, e a fórmula só acertava parte
+     deles: conferido arquivo por arquivo em 25/09/2026, 24 dos 56 links caíam na
+     página "Erro 404" do Objetivo (que responde 200, por isso ninguém notou).
+     - UNESP 2021 e 2022 tiveram a 1ª fase em DOIS dias (pasta 1dia/2dia);
+     - a 2ª fase da UNESP só tem gabarito publicado em 2021, 2022 e 2023;
+     - Mackenzie 2019/2020 são manhã/tarde, 2023 só tem a prova resolvida,
+       e 2021/2022 não existem no acervo — saíram da lista de anos. */
+  var OBJ = "https://www.curso-objetivo.br/vestibular/resolucao-comentada/";
   function unespEdicao(ano) {
-    var base = "https://www.curso-objetivo.br/vestibular/resolucao-comentada/unesp/" + ano + "/";
-    return [
-      { label: "📄 Prova · 1ª fase", url: base + "1fase/UNESP" + ano + "_1fase_prova.pdf" },
-      { label: "✅ Gabarito · 1ª fase", url: base + "1fase/UNESP" + ano + "_1fase_gabarito.pdf" },
-      { label: "📄 Prova · 2ª fase", url: base + "2fase/UNESP" + ano + "_2fase_prova.pdf" },
-      { label: "✅ Gabarito · 2ª fase", url: base + "2fase/UNESP" + ano + "_2fase_gabarito.pdf" }
-    ];
+    var base = OBJ + "unesp/" + ano + "/", f1 = "_1fase_", out = [];
+    if (ano === 2021 || ano === 2022) {
+      out.push(
+        { label: "📄 Prova · 1ª fase Dia 1", url: base + "1fase/1dia/UNESP" + ano + f1 + "prova.pdf" },
+        { label: "✅ Gabarito · 1ª fase Dia 1", url: base + "1fase/1dia/UNESP" + ano + f1 + "gabarito.pdf" },
+        { label: "📄 Prova · 1ª fase Dia 2", url: base + "1fase/2dia/UNESP" + ano + f1 + "prova.pdf" },
+        { label: "✅ Gabarito · 1ª fase Dia 2", url: base + "1fase/2dia/UNESP" + ano + f1 + "gabarito.pdf" });
+    } else {
+      out.push(
+        { label: "📄 Prova · 1ª fase", url: base + "1fase/UNESP" + ano + f1 + "prova.pdf" },
+        { label: "✅ Gabarito · 1ª fase", url: base + "1fase/UNESP" + ano + f1 + "gabarito.pdf" });
+    }
+    out.push({ label: "📄 Prova · 2ª fase", url: base + "2fase/UNESP" + ano + "_2fase_prova.pdf" });
+    if (ano >= 2021 && ano <= 2023) out.push({ label: "✅ Gabarito · 2ª fase", url: base + "2fase/UNESP" + ano + "_2fase_gabarito.pdf" });
+    return out;
   }
   function mackenzieEdicao(ano) {
-    var base = "https://www.curso-objetivo.br/vestibular/resolucao-comentada/mackenzie/" + ano + "/";
+    var base = OBJ + "mackenzie/" + ano + "/";
+    if (ano === 2019 || ano === 2020) {
+      return [
+        { label: "📄 Prova · Manhã", url: base + "manha/mackenzie" + ano + "_manha_prova.pdf" },
+        { label: "✅ Gabarito · Manhã", url: base + "manha/mackenzie" + ano + "_manha_gabarito.pdf" },
+        { label: "📄 Prova · Tarde", url: base + "tarde/mackenzie" + ano + "_tarde_prova.pdf" },
+        { label: "✅ Gabarito · Tarde", url: base + "tarde/mackenzie" + ano + "_tarde_gabarito.pdf" }
+      ];
+    }
+    if (ano === 2023) {
+      return [
+        { label: "📄 Prova resolvida · Manhã", url: base + "manha/mackenzie2023_manha.pdf" },
+        { label: "📄 Prova resolvida · Tarde", url: base + "tarde/mackenzie2023_tarde.pdf" }
+      ];
+    }
     return [
       { label: "📄 Prova · Dia 1", url: base + "1dia/mackenzie" + ano + "_prova_1dia.pdf" },
       { label: "✅ Gabarito · Dia 1", url: base + "1dia/mackenzie" + ano + "_gabarito_1dia.pdf" },
@@ -169,23 +199,26 @@
     { key: "FUVEST", nome: "FUVEST (USP)", anos: [2025, 2024, 2023, 2022, 2021, 2020], edicao: porAno(FUVEST_ANOS), hub: "https://www.fuvest.br/acervo/" },
     { key: "UNICAMP", nome: "UNICAMP (Comvest)", anos: [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018], edicao: porAno(UNICAMP_ANOS), hub: "https://www.comvest.unicamp.br/vestibulares-anteriores/" },
     { key: "UNESP", nome: "UNESP (Vunesp)", anos: [2025, 2024, 2023, 2022, 2021, 2020, 2019], edicao: unespEdicao, hub: "https://vestibular.unesp.br/" },
-    { key: "MACKENZIE", nome: "Mackenzie", anos: [2025, 2024, 2023, 2022, 2021, 2020, 2019], edicao: mackenzieEdicao },
+    { key: "MACKENZIE", nome: "Mackenzie", anos: [2025, 2024, 2023, 2020, 2019], edicao: mackenzieEdicao },
     { key: "PUCSP", nome: "PUC-SP", hub: "https://www.pucsp.br/informe/informativo-de-provas" },
     { key: "PUCCAMP", nome: "PUC-Campinas", anos: [2024, 2023, 2022, 2021], edicao: porAno(PUCCAMP_ANOS), hub: "https://vestibular.puc-campinas.edu.br/provas-anteriores/" },
     // Insper mudou de banca recente (própria/digital → Vunesp, a partir de 2025/2026) e as provas
     // antigas eram por TRI/individualizadas — sem PDF único por ano pra linkar com segurança.
     // Por isso só o acervo oficial de provas passadas, sem seletor de ano.
-    { key: "INSPER", nome: "Insper", hub: "https://www.insper.edu.br/content/insper-portal/pt/cursos/vestibular/provas-e-gabaritos.html" }
+    { key: "INSPER", nome: "Insper", hub: "https://www.insper.edu.br/pt/cursos/vestibular/provas-e-gabaritos" }
   ];
 
   // Informações-chave de cada vestibular (inscrição, prova, edital, site oficial).
   // Conferido diretamente nos sites oficiais/fontes oficiais em 19/08/2026 — como cada
   // instituição pode alterar datas, o card sempre linka pro site oficial pra confirmar.
-  var VEST_INFO_ATUALIZADO = "19/08/2026";
+  // 25/09/2026: reconferido. A UNICAMP tinha PRORROGADO a inscrição (31/ago →
+  // 08/set) e o card seguia com a data velha; o link de edital do ENEM passou
+  // a cair numa tela de login do gov.br.
+  var VEST_INFO_ATUALIZADO = "25/09/2026";
   var VEST_INFO = {
     ENEM: {
       site: "https://enem.inep.gov.br/participante/",
-      edital: "https://www.gov.br/inep/pt-br/centrais-de-conteudo/noticias/enem/inscricoes-para-o-enem-2026-estao-abertas",
+      edital: "https://www.gov.br/inep/pt-br/areas-de-atuacao/avaliacao-e-exames-educacionais/enem",
       inscricao: "Encerrada (foi de 25/mai a 05/jun/2026, pagamento até 10/jun)",
       inscricaoFim: "2026-06-05",
       prova: "8 e 15 de novembro de 2026",
@@ -204,8 +237,8 @@
     UNICAMP: {
       site: "https://www.comvest.unicamp.br/ingresso-2027/vestibular-2027/",
       edital: "https://www.comvest.unicamp.br/ingresso-2027/vestibular-2027/",
-      inscricao: "03 a 31/ago/2026 (pagamento até 08/set)",
-      inscricaoFim: "2026-08-31",
+      inscricao: "03/ago a 08/set/2026 (prorrogada; pagamento até 08/set)",
+      inscricaoFim: "2026-09-08",
       prova: "1ª fase: 18/out/2026 · 2ª fase: 29 e 30/nov/2026",
       provaData: "2026-10-18",
       obs: "Taxa de R$ 230. 2.523 vagas em 70 opções de curso, incluindo Relações Internacionais e IA/Ciência de Dados (novos)."
@@ -217,7 +250,7 @@
       inscricaoFim: "2026-10-20",
       prova: "1ª fase: 22/nov/2026 · 2ª fase: 13 e 14/dez/2026",
       provaData: "2026-11-22",
-      obs: "Cadastro pelo site da Fundação Vunesp (vunesp.com.br). 5.850 vagas em 136 cursos, 24 cidades."
+      obs: "Taxa de R$ 225 (pagamento até 21/out). Cadastro pelo site da Fundação Vunesp (vunesp.com.br). 5.850 vagas em 136 cursos, 24 cidades."
     },
     MACKENZIE: {
       site: "https://www.mackenzie.br/processos-seletivos/vestibular-graduacao",
@@ -249,7 +282,49 @@
   };
 
   var state, marks = {}, pomo = { mode: "focus", remaining: 0, running: false, timer: null };
-  function load() { try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; } if (!state || !state.registros) state = { registros: [] }; if (!state.pomo) state.pomo = { focus: 25, brk: 5, cycles: 0, totalMin: 0 }; if (!state.provas) state.provas = []; if (!state.dias) state.dias = {}; if (!state.badges) state.badges = []; if (state.meta == null) state.meta = 0; if (!state.vestTab) state.vestTab = "enem"; if (!state.metas) state.metas = []; if (!state.exercicios) state.exercicios = []; }
+  function load() { try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; } if (!state || !state.registros) state = { registros: [] }; if (!state.pomo) state.pomo = { focus: 25, brk: 5, cycles: 0, totalMin: 0 }; if (!state.provas) state.provas = []; if (!state.dias) state.dias = {}; if (!state.badges) state.badges = []; if (state.meta == null) state.meta = 0; if (!state.vestTab) state.vestTab = "enem"; if (!state.metas) state.metas = []; if (!state.exercicios) state.exercicios = []; saneia(); }
+  /* Saneamento no load (mesmo desenho da V-06 no notas/estudos, que esta página
+     não tinha). O estado chega do blob da nuvem, do espelho local e da migração
+     do Painel de Estudos — e ids/datas daqui entram em atributos HTML. Id fica
+     restrito a [A-Za-z0-9_-] em vez de escapado, porque escape de HTML não
+     protege dentro de handler JS. */
+  function _sid(v) { return String(v == null ? "" : v).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64); }
+  function _iso(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : ""; }
+  function _t(v, lim) { return String(v == null ? "" : v).slice(0, lim); }
+  function _n(v, min, max) { var n = Number(v); return isFinite(n) ? Math.min(max, Math.max(min, n)) : min; }
+  function _arr(v) { return Array.isArray(v) ? v.slice(0, 2000) : []; }
+  function _obj(v) { return v && typeof v === "object" && !Array.isArray(v); }
+  function saneia() {
+    state.registros = _arr(state.registros).filter(_obj).map(function (r) {
+      var ac = {}; AREAS.forEach(function (a) { ac[a.k] = _n(r.ac && r.ac[a.k], 0, 45); });
+      return { id: _sid(r.id) || "r-" + Math.random().toString(36).slice(2), vest: _t(r.vest, 20), ano: _t(r.ano, 4),
+        data: _iso(r.data), ac: ac, total: _n(r.total, 0, 180) };
+    });
+    state.provas = _arr(state.provas).filter(_obj).map(function (p) {
+      var o = { id: _sid(p.id) || "prova-" + Math.random().toString(36).slice(2), instituicao: _t(p.instituicao, 20),
+        tipo: p.tipo === "passado" ? "passado" : "simulado", nome: _t(p.nome, 160), data: _iso(p.data),
+        acertos: _n(p.acertos, 0, 9999), total: _n(p.total, 0, 9999) };
+      if (p.materia != null) o.materia = _t(p.materia, 60);
+      return o;
+    });
+    state.metas = _arr(state.metas).filter(_obj).map(function (m) {
+      return { id: _sid(m.id) || "meta-" + Math.random().toString(36).slice(2), texto: _t(m.texto, 200),
+        alvo: _n(m.alvo, 1, 9999), feito: _n(m.feito, 0, 9999), semana: _iso(m.semana) };
+    });
+    state.exercicios = _arr(state.exercicios).filter(_obj).map(function (e) {
+      return { id: _sid(e.id) || "ex-" + Math.random().toString(36).slice(2), data: _iso(e.data),
+        qtd: _n(e.qtd, 0, 99999), materia: _t(e.materia, 60) };
+    });
+    var dias = {};
+    if (_obj(state.dias)) Object.keys(state.dias).forEach(function (k) { if (_iso(k)) dias[k] = _n(state.dias[k], 0, 1440); });
+    state.dias = dias;
+    state.badges = _arr(state.badges).filter(_obj).map(function (b) { return { k: _sid(b.k), data: _iso(b.data) }; });
+    state.meta = _n(state.meta, 0, 100);
+    state.vestTab = _t(state.vestTab, 30);
+    if (!_obj(state.pomo)) state.pomo = {};
+    state.pomo = { focus: _n(state.pomo.focus || 25, 1, 180), brk: _n(state.pomo.brk || 5, 1, 60),
+      cycles: _n(state.pomo.cycles, 0, 1e6), totalMin: _n(state.pomo.totalMin, 0, 1e8) };
+  }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
   function esc(s) { return (s == null ? "" : "" + s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -257,7 +332,7 @@
     // href="..." fecha o atributo e injeta outro (V-06 da auditoria).
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function todayISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
-  function fmtBR(iso) { if (!iso) return ""; var p = iso.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); }
+  function fmtBR(iso) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ""))) return ""; var p = iso.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); }
   function pct(n, d) { return d ? Math.round(n / d * 100) : 0; }
 
   /* ---------------- metas semanais, constância (heatmap) e exercícios ----------------
@@ -275,7 +350,7 @@
     var lbl = pad2(we.getDate()) + "/" + pad2(we.getMonth() + 1) + " a " + pad2(wf.getDate()) + "/" + pad2(wf.getMonth() + 1);
     var rows = metas.map(function (m) {
       var alvo = m.alvo || 1, feito = Math.min(m.feito || 0, alvo), ok = feito >= alvo, p = Math.round(feito / alvo * 100);
-      return '<div class="metarow' + (ok ? " ok" : "") + '"><button class="iconbtn" title="−" data-mid="' + m.id + '" data-d="-1">−</button><button class="iconbtn" title="+" data-mid="' + m.id + '" data-d="1">＋</button><span class="mt-txt">' + esc(m.texto) + '</span><div class="mt-bar"><i style="width:' + p + '%"></i></div><span class="mt-prog">' + feito + '/' + alvo + '</span><button class="iconbtn" title="Excluir" data-mrm="' + m.id + '">🗑</button></div>';
+      return '<div class="metarow' + (ok ? " ok" : "") + '"><button class="iconbtn" title="−" data-mid="' + esc(m.id) + '" data-d="-1">−</button><button class="iconbtn" title="+" data-mid="' + esc(m.id) + '" data-d="1">＋</button><span class="mt-txt">' + esc(m.texto) + '</span><div class="mt-bar"><i style="width:' + p + '%"></i></div><span class="mt-prog">' + feito + '/' + alvo + '</span><button class="iconbtn" title="Excluir" data-mrm="' + esc(m.id) + '">🗑</button></div>';
     }).join("");
     return '<div class="box"><div class="toolbar"><h2>🎯 Metas — semana ' + lbl + '</h2><button class="btn green small" id="meta-novo">＋ Meta</button></div>'
       + (rows || '<div class="empty">Nenhuma meta esta semana. Defina o que quer cumprir!</div>')
@@ -370,7 +445,7 @@
     var maxM = Math.max.apply(null, [1].concat(meses));
     var bars = meses.map(function (v, i) { return '<div class="exbar" title="' + MES_ABREV[i] + ": " + v + ' exercício(s)"><i style="height:' + Math.round(v / maxM * 100) + '%"></i><span>' + MES_LETRA[i] + '</span></div>'; }).join("");
     var hist = state.exercicios.slice().sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); }).slice(0, 6).map(function (e) {
-      return '<div class="ex-hist"><span>' + fmtBR(e.data) + (e.materia ? " · " + esc(e.materia) : "") + '</span><b>+' + (+e.qtd || 0) + '</b><button class="iconbtn" title="Excluir" data-erm="' + e.id + '">🗑</button></div>';
+      return '<div class="ex-hist"><span>' + fmtBR(e.data) + (e.materia ? " · " + esc(e.materia) : "") + '</span><b>+' + (+e.qtd || 0) + '</b><button class="iconbtn" title="Excluir" data-erm="' + esc(e.id) + '">🗑</button></div>';
     }).join("");
     return '<div class="box"><div class="toolbar"><h2>📒 Exercícios em ' + ano + '</h2><span class="muted">total acumulado: <b style="color:var(--gold)">' + totalGeral + '</b></span></div>'
       + '<div class="ex-top"><div class="ex-big">' + totalAno + '</div><div class="muted">exercícios feitos em ' + ano + '</div></div>'
@@ -443,6 +518,30 @@
       + '<div class="actions"><button class="btn green small" id="foco-salvar">💾 Salvar</button><button class="btn ghost small" id="foco-cancelar">Cancelar</button></div>'
       + '</div>';
   }
+  /* Há quantos dias alguém conferiu VEST_INFO na fonte oficial.
+
+     Isto não é enfeite de rodapé. Não existe feed nem scraper atrás desta
+     tabela: ela é curadoria manual, digitada à mão. Enquanto ninguém edita o
+     arquivo, o app continua afirmando o que foi digitado — e o modo de falha
+     que machuca não é a data vencida (essa a tela já mostra como "inscrição
+     encerrada"), é a PRORROGADA: a banca estende o prazo, o aluno lê
+     "encerrada" aqui e não se inscreve. Passado um mês sem conferência, o
+     aviso para de ser cinza e passa a dizer há quanto tempo. */
+  function diasDesdeConferencia() {
+    var p = String(VEST_INFO_ATUALIZADO).split("/").map(Number);
+    if (p.length !== 3 || p.some(isNaN)) return null;
+    var d = diasFaltamISO(p[2] + "-" + ("0" + p[1]).slice(-2) + "-" + ("0" + p[0]).slice(-2));
+    return d == null ? null : -d;
+  }
+  function avisoConferenciaHTML() {
+    var d = diasDesdeConferencia(), velho = d != null && d >= 30;
+    return '<div class="hint" style="margin-top:8px' + (velho ? ';color:var(--gold);font-weight:600' : '') + '">'
+      + (velho ? '⚠ ' : '') + 'Dados conferidos em ' + esc(VEST_INFO_ATUALIZADO)
+      + (velho
+        ? ' — faz ' + d + ' dias. Prazo de inscrição muda e às vezes é prorrogado: confirme no site oficial antes de contar com esta data.'
+        : ' — confirme sempre no site oficial.')
+      + '</div>';
+  }
   function focoCardHTML(key) {
     var e = EXAMS.filter(function (x) { return x.key === key; })[0];
     var info = VEST_INFO[key];
@@ -460,7 +559,7 @@
       + '<div>📄 <b>Edital / mais informações:</b> <a href="' + esc(info.edital) + '" target="_blank" rel="noopener" style="color:var(--cyan);font-weight:700">abrir ↗</a></div>'
       + (info.obs ? '<div class="muted" style="font-size:.85rem">' + esc(info.obs) + '</div>' : "")
       + '</div>'
-      + '<div class="hint" style="margin-top:8px">Dados conferidos em ' + esc(VEST_INFO_ATUALIZADO) + ' — confirme sempre no site oficial.</div>'
+      + avisoConferenciaHTML()
       + '</div>';
   }
   function wireFoco() {
@@ -990,7 +1089,7 @@
   /* ---------------- desempenho por outros vestibulares (FUVEST, UNICAMP, PUC...) ----------------
      Registro manual de acertos (o ENEM já tem o corretor completo por questão acima). */
   var VESTIBULARES = {
-    FUVEST: { nome: "FUVEST (USP)", sigla: "FUVEST", cor: "var(--accfuvest)", tipo: "acertos", total: 90, desc: "1ª fase · 90 questões objetivas" },
+    FUVEST: { nome: "FUVEST (USP)", sigla: "FUVEST", cor: "var(--accfuvest)", tipo: "acertos", total: 90, desc: "1ª fase · 90 questões objetivas (80 a partir da Fuvest 2027)" },
     UNICAMP: { nome: "UNICAMP (Comvest)", sigla: "UNICAMP", cor: "var(--accunicamp)", tipo: "acertos", total: 72, desc: "1ª fase · 72 questões" },
     UNESP: { nome: "UNESP (Vunesp)", sigla: "UNESP", cor: "var(--areaN)", tipo: "acertos", total: 90, desc: "1ª fase · 90 questões objetivas" },
     MACKENZIE: { nome: "Mackenzie", sigla: "Mackenzie", cor: "var(--blue)", tipo: "acertos", total: 0, desc: "objetiva + redação" },
@@ -1077,7 +1176,7 @@
         var tag = p.tipo === "passado" ? '<span class="tipo-tag passado">vestibular passado</span>' : '<span class="tipo-tag sim">simulado</span>';
         var titulo = ehMat ? esc(p.materia || "(sem matéria)") : esc(p.nome || cfg.sigla);
         var sub = ehMat && p.nome ? ' <span class="muted">' + esc(p.nome) + '</span>' : "";
-        return '<div class="sim-card"><div class="sim-head"><div><b>' + titulo + '</b>' + sub + ' ' + tag + ' <span class="muted">· ' + fmtBR(p.data) + '</span></div><div class="sim-pct" style="color:' + pctColor(nt.pct) + '">' + esc(nt.label) + '</div></div><div class="actions" style="margin-top:8px;justify-content:flex-end"><button class="iconbtn" title="Excluir" data-rm="' + p.id + '">🗑</button></div></div>';
+        return '<div class="sim-card"><div class="sim-head"><div><b>' + titulo + '</b>' + sub + ' ' + tag + ' <span class="muted">· ' + fmtBR(p.data) + '</span></div><div class="sim-pct" style="color:' + pctColor(nt.pct) + '">' + esc(nt.label) + '</div></div><div class="actions" style="margin-top:8px;justify-content:flex-end"><button class="iconbtn" title="Excluir" data-rm="' + esc(p.id) + '">🗑</button></div></div>';
       }).join("");
       corpo = vestResumoInst(inst)
         + '<h3 style="margin:16px 0 4px">📈 Evolução · ' + esc(cfg.sigla) + '</h3>'
@@ -1130,7 +1229,7 @@
     var list = provas.slice().reverse().map(function (p) {
       var nt = notaProva(p);
       var tag = p.tipo === "passado" ? '<span class="tipo-tag passado">vestibular passado</span>' : '<span class="tipo-tag sim">simulado</span>';
-      return '<div class="sim-card"><div class="sim-head"><div><b>' + esc(p.nome || cfg.sigla) + '</b> ' + tag + ' <span class="muted">· ' + fmtBR(p.data) + '</span></div><div class="sim-pct" style="color:' + pctColor(nt.pct) + '">' + esc(nt.label) + '</div></div><div class="actions" style="margin-top:8px;justify-content:flex-end"><button class="iconbtn" title="Excluir" data-rmv="' + p.id + '">🗑</button></div></div>';
+      return '<div class="sim-card"><div class="sim-head"><div><b>' + esc(p.nome || cfg.sigla) + '</b> ' + tag + ' <span class="muted">· ' + fmtBR(p.data) + '</span></div><div class="sim-pct" style="color:' + pctColor(nt.pct) + '">' + esc(nt.label) + '</div></div><div class="actions" style="margin-top:8px;justify-content:flex-end"><button class="iconbtn" title="Excluir" data-rmv="' + esc(p.id) + '">🗑</button></div></div>';
     }).join("");
     return '<div class="box" id="prova-sec-' + inst + '">'
       + '<div class="toolbar" style="margin:0 0 2px"><h2 style="color:inherit;font-size:1.08rem;font-weight:800">📈 Sua evolução · ' + esc(cfg.sigla) + '</h2>'
@@ -1611,10 +1710,18 @@
       b.onclick = function () { pomoPreset(parseInt(b.getAttribute("data-f"), 10), parseInt(b.getAttribute("data-b"), 10)); };
     });
   }
-  function pomoTick() { pomo.remaining--; if (pomo.remaining <= 0) { pomoPhaseEnd(); return; } updatePomoUI(); }
+  /* O relógio conta pelo horário de término, não por "menos 1 a cada tick".
+     Com a tela bloqueada ou a aba em segundo plano o navegador freia o
+     setInterval (1 tick por minuto, às vezes nenhum), e o contador antigo
+     ficava para trás: 25 min de foco viravam 40 no relógio de parede. */
+  function pomoTick() {
+    pomo.remaining = Math.max(0, Math.round((pomo.endAt - Date.now()) / 1000));
+    if (pomo.remaining <= 0) { pomoPhaseEnd(); return; }
+    updatePomoUI();
+  }
   function pomoToggle() {
-    if (pomo.running) { pomo.running = false; clearInterval(pomo.timer); }
-    else { pomo.running = true; pomo.timer = setInterval(pomoTick, 1000); }
+    if (pomo.running) { pomoTick(); pomo.running = false; clearInterval(pomo.timer); }
+    else { pomo.running = true; pomo.endAt = Date.now() + pomo.remaining * 1000; pomo.timer = setInterval(pomoTick, 1000); }
     updatePomoBtn();
   }
   function pomoPhaseEnd() {
@@ -1631,6 +1738,7 @@
     } else {
       pomo.mode = "focus"; pomo.remaining = state.pomo.focus * 60;
     }
+    pomo.endAt = Date.now() + pomo.remaining * 1000;
     pomo.timer = setInterval(pomoTick, 1000); // segue rodando pro próximo bloco
     updatePomoUI();
   }
@@ -1658,24 +1766,39 @@
     var rows = state.registros.slice().sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); }).map(function (r) {
       return '<div class="hrow"><span><b>' + esc(r.vest) + ' ' + esc(r.ano) + '</b> · ' + fmtBR(r.data) + '</span>'
         + '<span class="muted">' + r.total + '/180 (' + pct(r.total, 180) + '%)</span>'
-        + '<button class="del" onclick="_vdel(\'' + r.id + '\')">remover</button></div>';
+        + '<button class="del" data-vdel="' + esc(r.id) + '">remover</button></div>';
     }).join("");
     return '<div class="box"><h2>🗂️ Histórico do ENEM</h2>' + rows + '</div>';
   }
-  window._vdel = function (id) {
+  /* Delegação em vez de onclick="_vdel('id')" embutido: o id não passa mais por
+     dentro de código JS no HTML, e a página fica pronta para uma CSP sem
+     'unsafe-inline'. Um listener só, que sobrevive aos re-renders. */
+  document.addEventListener("click", function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest("[data-vdel]") : null;
+    if (!b) return;
+    var id = b.getAttribute("data-vdel");
     if (!confirm("Remover este resultado?")) return;
     state.registros = state.registros.filter(function (r) { return r.id !== id; });
     save(); refreshDynamic();
-  };
+  });
 
   /* ---------------- migração única: traz p/ cá os registros de vestibular (FUVEST/UNICAMP/PUC...)
      que ficavam presos na aba "Vestibular" do Painel de Estudos, agora descontinuada ali. ---------------- */
+  /* CORREÇÃO 25/09/2026: o documento lido era "estudos-lab" fixo — nome de um
+     ambiente que não existe mais. Desde o env.js o painel de estudos se chama
+     "estudos" (produção), "estudos-lab2" ou "estudos-lab3", então a migração
+     nunca achava nada, marcava "migrado" e desistia para sempre. A flag nova
+     (migradoEstudos2) faz rodar de novo uma vez, agora no documento certo.
+     Rodar de novo é seguro: provas/metas/exercícios deduplicam por id, e os
+     minutos por dia agora juntam pelo MAIOR valor em vez de somar — somar
+     contaria em dobro um dia que já tivesse vindo na primeira passada. */
   function migrarDoEstudos() {
-    if (state.migradoEstudos) return;
+    if (state.migradoEstudos2) return;
     if (!window.Cloud || !window.Cloud.user || !window.Cloud.firestore) return;
     var uid = window.Cloud.user.uid;
-    window.Cloud.firestore().collection("users").doc(uid).collection("panels").doc("estudos-lab").get().then(function (snap) {
-      state.migradoEstudos = true;
+    var painel = (window.Ambiente && Ambiente.colecao) ? Ambiente.colecao("estudos") : "estudos-lab";
+    window.Cloud.firestore().collection("users").doc(uid).collection("panels").doc(painel).get().then(function (snap) {
+      state.migradoEstudos = true; state.migradoEstudos2 = true;
       if (!snap.exists || !snap.data() || !snap.data().blob) { save(); return; }
       var blob = snap.data().blob, raw = null;
       Object.keys(blob).forEach(function (k) {
@@ -1696,8 +1819,8 @@
       (raw.vest.metas || []).forEach(function (m) { if (m && m.id && !metaIds[m.id]) { state.metas.push(m); metaIds[m.id] = true; added++; } });
       var exIds = {}; state.exercicios.forEach(function (e) { exIds[e.id] = true; });
       (raw.vest.exercicios || []).forEach(function (e) { if (e && e.id && !exIds[e.id]) { state.exercicios.push(e); exIds[e.id] = true; added++; } });
-      Object.keys(raw.vest.dias || {}).forEach(function (k) { state.dias[k] = (state.dias[k] || 0) + (raw.vest.dias[k] || 0); });
-      save();
+      Object.keys(raw.vest.dias || {}).forEach(function (k) { state.dias[k] = Math.max(state.dias[k] || 0, +raw.vest.dias[k] || 0); });
+      saneia(); save();
       refreshHeatmap();
       if (added) { refreshDesemp(); refreshMetas(); refreshExercicios(); }
     }).catch(function () { /* offline/sem permissão agora — tenta de novo no próximo login */ });

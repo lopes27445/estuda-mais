@@ -195,6 +195,22 @@ function builtin(v){
   if(window.EP && String(window.EP.serie)!=="3") return [];
   return v==="provas"?PROVAS:PC;
 }
+/* Item do calendário publicado pela escola. Quem grava é QUALQUER professor
+   cadastrado, e o que chega aqui vai para a tela de todos os alunos da série.
+   O id do documento entrava cru em onclick="muralToggle('…')" e a data em
+   fmtData() sem escape: um id com aspa fechava o atributo e virava script na
+   sessão de cada aluno. O admin só cria ids automáticos (20 alfanuméricos),
+   então id fora do padrão não é item legítimo — é descartado, não consertado. */
+function saneiaPublicado(id, o){
+  if(!/^[A-Za-z0-9_-]{1,64}$/.test(String(id||""))) return null;
+  o=(o&&typeof o==="object")?o:{};
+  const out={};
+  ["disc","prof","area","mod","note","desc","tipo","ver"].forEach(k=>{ if(o[k]!=null) out[k]=_txt(o[k],k==="desc"||k==="note"?1000:200); });
+  out.data=/^\d{4}-\d{2}-\d{2}$/.test(String(o.data||""))?o.data:"";
+  out.topics=_lista(o.topics).map(t=>_txt(t,400));
+  out.id=id;
+  return out;
+}
 // carrega provas/PC/regras publicados da série antes de renderizar
 function loadSerieContent(done){
   if(!(window.Cloud && Cloud.firestore && window.EP)){ done(); return; }
@@ -208,7 +224,7 @@ function loadSerieContent(done){
      // vendo a anterior inteira — nunca um calendário pela metade.
      var ativo = res[3].exists ? (res[3].data()||{}) : {};
      function daVersaoAtiva(snap, tipo){
-       var docs = snap.docs.map(function(d){var o=d.data(); o.id=d.id; return o;});
+       var docs = snap.docs.map(function(d){ return saneiaPublicado(d.id, d.data()); }).filter(Boolean);
        var v = ativo[tipo];
        if(!v) return docs;                                  // antes do ponteiro existir
        var f = docs.filter(function(o){ return o.ver===v; });
@@ -410,7 +426,8 @@ function muralPostsHTML(id,posts){
   const myUid=Cloud.mural.myUid();
   return posts.map(p=>{
     const mine=p.uid===myUid;
-    const del=mine?`<button onclick="muralRemove('${id}','${p.id}')" title="remover" style="background:none;border:none;color:var(--mut);cursor:pointer;font-size:.9rem;line-height:1">×</button>`:"";
+    // id do post vai dentro de onclick: só passa o formato de id do Firestore
+    const del=(mine&&/^[A-Za-z0-9_-]{1,64}$/.test(String(p.id)))?`<button onclick="muralRemove('${safeId(id)}','${p.id}')" title="remover" style="background:none;border:none;color:var(--mut);cursor:pointer;font-size:.9rem;line-height:1">×</button>`:"";
     if(p.tipo==="link"){
       const url=safeUrl(p.url)||"#";
       return `<span class="chip" style="margin:0 6px 6px 0"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.label||p.url)}</a><span style="color:var(--mut);font-size:.72rem">· ${esc(p.nome||"aluno")}</span>${del}</span>`;

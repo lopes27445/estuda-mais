@@ -22,6 +22,16 @@ rules_version = '2';
 //      (LGPD art. 18), que a proposta afirma existir.
 // Junto: B2 (aposenta o opt-in de risco) e D1 (trilha de mudança de faixa).
 //
+// Revisão de 25/09/2026 — V-16: valores com tipo e tamanho (antes só a LISTA
+// de campos era fechada), ids sem caractere que feche atributo HTML, pedido de
+// matrícula coerente com a sala e com o e-mail do token. Motivo concreto: um
+// aluno gravava `medias` como texto com <img onerror> e o script rodava na
+// tela da coordenação.
+//
+// ATENÇÃO — em 25/09/2026 o que estava PUBLICADO era a versão de 26/08 (289
+// linhas): nada das revisões de 05/09 e 22/09 tinha ido ao ar. Antes de
+// confiar que uma correção daqui vale, rode `node tools/confere-regras.mjs`.
+//
 // Continuam ABERTAS e documentadas em Estuda+/Auditoria de Segurança.md:
 //   V-01 parcial: coordenação ainda escreve staff direto do navegador; o ideal
 //        é só via Admin SDK com auditoria, o que exige Cloud Functions.
@@ -116,6 +126,31 @@ service cloud.firestore {
       return ['email', 'nome', 'serie', 'turma', 'vestibulares'];
     }
 
+    /* V-16 (25/09/2026): as regras fechavam QUAIS campos, nunca o que vai
+       DENTRO deles. `nome` podia ser um texto de 1 MB, `serie` um objeto,
+       `medias` uma string com <img onerror>. Era por aí que o XSS das médias
+       chegava à tela da coordenação. Agora cada valor escrito pelo navegador
+       tem tipo e tamanho.
+
+       `ks` = as chaves a validar. No create são todas; no update só as que
+       MUDARAM — um perfil antigo com valor fora do padrão continua podendo ser
+       atualizado nos outros campos, e o valor ruim não pode ser reescrito. */
+    function textoAte(v, n) {
+      return v is string && v.size() <= n;
+    }
+    function idSeguro(id) {
+      // formato dos ids automáticos do Firestore, com folga. Sem aspas, sem
+      // espaço: o id vai parar dentro de atributo HTML no cliente.
+      return id.matches('^[A-Za-z0-9_-]{1,64}$');
+    }
+    function perfilOk(d, ks) {
+      return (!('nome' in ks) || textoAte(d.nome, 120))
+          && (!('email' in ks) || textoAte(d.email, 254))
+          && (!('serie' in ks) || d.serie in ['1', '2', '3'])
+          && (!('turma' in ks) || textoAte(d.turma, 3))
+          && (!('vestibulares' in ks) || (d.vestibulares is list && d.vestibulares.size() <= 3));
+    }
+
     /* Exclusão (LGPD art. 18). Antes era `allow delete: if false` aqui e nos
        painéis — ou seja, NINGUÉM apagava: nem o próprio aluno, nem a
        coordenação, nem o dono do sistema. Um aluno que saísse da escola ficava
@@ -134,10 +169,13 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.keys().hasOnly(camposPerfil());
+                    && request.resource.data.keys().hasOnly(camposPerfil())
+                    && perfilOk(request.resource.data, request.resource.data.keys().toSet());
       allow update: if signedIn() && request.auth.uid == uid
                     && request.resource.data.diff(resource.data)
-                         .affectedKeys().hasOnly(camposPerfil());
+                         .affectedKeys().hasOnly(camposPerfil())
+                    && perfilOk(request.resource.data,
+                                request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if (signedIn() && request.auth.uid == uid)
                     || ehCoordDaEscolaUnica();
     }
@@ -149,8 +187,14 @@ service cloud.firestore {
     // arquivo.
     match /users/{uid}/panels/{painel} {
       allow read: if signedIn() && request.auth.uid == uid;
+      // V-16: nome de painel em lista fechada (antes qualquer conta criava
+      // quantos documentos quisesse sob o próprio uid, com qualquer nome) e
+      // blob sempre um mapa. Os nomes são os do env.js: base + sufixo do lab.
       allow create, update: if signedIn() && request.auth.uid == uid
-                            && request.resource.data.keys().hasOnly(['blob', 'updatedAt']);
+                            && painel.matches('^(notas|estudos|vestibular)(-lab[0-9]*)?$')
+                            && request.resource.data.keys().hasOnly(['blob', 'updatedAt'])
+                            && request.resource.data.blob is map
+                            && request.resource.data.updatedAt is number;
       allow delete: if (signedIn() && request.auth.uid == uid)
                     || ehCoordDaEscolaUnica();
     }
@@ -164,18 +208,45 @@ service cloud.firestore {
     match /schools/{escola}/staff/{email} {
       allow read: if signedIn() && escolaConhecida(escola)
                   && (email == myEmail() || ehCoord(escola));
-      allow write: if ehCoord(escola);
+      // V-16: papel só entre os dois que existem, escopo como lista, e o id
+      // do documento com cara de e-mail minúsculo (é comparado com o e-mail
+      // do token, que o Firebase já entrega em minúsculas — um id com
+      // maiúscula criava um cadastro que nunca casava com ninguém).
+      allow create: if ehCoord(escola)
+                    && email.matches('^[a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,}$')
+                    && request.resource.data.keys().hasOnly(staffCampos())
+                    && staffOk(request.resource.data, request.resource.data.keys().toSet())
+                    && 'role' in request.resource.data;
+      allow update: if ehCoord(escola)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(staffCampos())
+                    && staffOk(request.resource.data,
+                               request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if ehCoord(escola);
+    }
+    function staffCampos() {
+      return ['role', 'addedBy', 'addedAt', 'materias', 'salas'];
+    }
+    function staffOk(d, ks) {
+      return (!('role' in ks) || d.role in ['professor', 'coordenacao'])
+          && (!('addedBy' in ks) || textoAte(d.addedBy, 254))
+          && (!('addedAt' in ks) || d.addedAt is number)
+          && (!('materias' in ks) || (d.materias is list && d.materias.size() <= 20))
+          && (!('salas' in ks) || (d.salas is list && d.salas.size() <= 30));
     }
 
     /* ------------------- calendário publicado pela escola ---------------- */
     // Aluno logado da escola lê; só staff verificado publica.
+    // V-16: o id do item vai para dentro de onclick="…" na tela de todos os
+    // alunos da série. O admin só cria id automático; id com aspa é ataque.
     match /schools/{escola}/series/{serie}/provas/{doc} {
       allow read: if signedIn() && escolaConhecida(escola);
-      allow write: if ehStaff(escola);
+      allow create, update: if ehStaff(escola) && idSeguro(doc);
+      allow delete: if ehStaff(escola);
     }
     match /schools/{escola}/series/{serie}/pc/{doc} {
       allow read: if signedIn() && escolaConhecida(escola);
-      allow write: if ehStaff(escola);
+      allow create, update: if ehStaff(escola) && idSeguro(doc);
+      allow delete: if ehStaff(escola);
     }
     match /schools/{escola}/series/{serie}/meta/{doc} {
       allow read: if signedIn() && escolaConhecida(escola);
@@ -276,7 +347,17 @@ service cloud.firestore {
                             && request.resource.data.keys().hasOnly(
                                  ['nome', 'status', 'acc', 'precisa', 'fechou',
                                   'medias', 'atualizado'])
-                            && request.resource.data.atualizado is number;
+                            && request.resource.data.atualizado is number
+                            // V-16: isto é lido na tela do PROFESSOR e da
+                            // COORDENAÇÃO. `medias` como texto era o vetor do
+                            // XSS contra quem tem poder de cadastrar staff.
+                            && textoAte(request.resource.data.get('nome', ''), 120)
+                            && request.resource.data.get('status', 'ok') in ['ok', 'atencao', 'risco']
+                            && request.resource.data.get('acc', 0) is number
+                            && request.resource.data.get('precisa', 0) is number
+                            && request.resource.data.get('fechou', false) is bool
+                            && request.resource.data.get('medias', []) is list
+                            && request.resource.data.get('medias', []).size() <= 4;
 
       allow delete: if (signedIn() && request.auth.uid == uid) || ehCoord(escola);
     }
@@ -306,8 +387,10 @@ service cloud.firestore {
                     && alunoAprovado(escola, sala, request.auth.uid)
                     && request.resource.data.keys().hasOnly(
                          ['uid', 'nome', 'de', 'para', 'quando'])
-                    && request.resource.data.de is string
-                    && request.resource.data.para is string
+                    && request.resource.data.de in ['ok', 'atencao', 'risco']
+                    && request.resource.data.para in ['ok', 'atencao', 'risco']
+                    && textoAte(request.resource.data.get('nome', ''), 120)
+                    && idSeguro(id)
                     && request.resource.data.de != request.resource.data.para
                     && request.resource.data.quando is number;
 
@@ -327,6 +410,19 @@ service cloud.firestore {
 
     function pedidoDeMatricula() {
       return ['nome', 'email', 'serie', 'turma', 'status', 'pedidoEm'];
+    }
+    /* V-16: o pedido é lido pela coordenação, que aprova olhando nome, e-mail
+       e turma. Antes o aluno podia pedir a sala 3A escrevendo "1ª B" nos
+       campos, ou colocar o e-mail de OUTRA pessoa no pedido — a coordenadora
+       aprovaria alguém que não é quem parece. Agora: e-mail é o do token,
+       e série/turma batem com o id da sala (mesma conta do Escola.salaId). */
+    function pedidoCoerente(sala, d) {
+      return textoAte(d.nome, 120)
+          && d.email == request.auth.token.email
+          && d.serie in ['1', '2', '3']
+          && d.turma in ['A', 'B', 'C', 'D', '—']
+          && sala == d.serie + (d.turma == '—' ? 'U' : d.turma)
+          && d.pedidoEm is number;
     }
 
     match /schools/{escola}/salas/{sala} {
@@ -361,7 +457,8 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly(pedidoDeMatricula())
                     && request.resource.data.status == 'pendente'
                     && request.resource.data.serie is string
-                    && request.resource.data.turma is string;
+                    && request.resource.data.turma is string
+                    && pedidoCoerente(sala, request.resource.data);
 
       // o aluno pode corrigir os próprios dados e reenviar o pedido, mas
       // NUNCA mexer no status. Só coordenação aprova ou nega.
@@ -369,7 +466,8 @@ service cloud.firestore {
                     || (signedIn() && escolaConhecida(escola)
                         && request.auth.uid == uid
                         && request.resource.data.diff(resource.data).affectedKeys()
-                             .hasOnly(['nome', 'email', 'serie', 'turma', 'pedidoEm']));
+                             .hasOnly(['nome', 'email', 'serie', 'turma', 'pedidoEm'])
+                        && pedidoCoerente(sala, request.resource.data));
 
       allow delete: if ehCoord(escola) || (signedIn() && request.auth.uid == uid);
     }
@@ -388,7 +486,11 @@ service cloud.firestore {
       allow create: if ehStaff(escola)
                     && request.resource.data.keys().hasOnly(
                          ['ator', 'acao', 'alvo', 'detalhe', 'quando'])
-                    && request.resource.data.ator == request.auth.token.email;
+                    && request.resource.data.ator == request.auth.token.email
+                    && textoAte(request.resource.data.get('acao', ''), 60)
+                    && textoAte(request.resource.data.get('alvo', ''), 300)
+                    && textoAte(request.resource.data.get('detalhe', ''), 300)
+                    && request.resource.data.get('quando', 0) is number;
       allow update, delete: if false;
     }
 
@@ -442,6 +544,19 @@ service cloud.firestore {
       return col == 'itens' || col == 'itens-lab2' || col == 'itens-lab3';
     }
 
+    /* V-16: post do mural é texto de um aluno exibido para a turma inteira.
+       Tipo e tamanho fechados (o app já corta o recado em 400), link só
+       http(s), e ids sem caractere que feche atributo HTML. */
+    function postOk(itemId, postId, d) {
+      return idSeguro(itemId) && idSeguro(postId)
+          && d.get('tipo', '') in ['link', 'texto']
+          && textoAte(d.get('texto', ''), 2000)
+          && textoAte(d.get('label', ''), 200)
+          && textoAte(d.get('nome', ''), 60)
+          && textoAte(d.get('url', ''), 1000)
+          && (d.get('url', '') == '' || d.get('url', '').matches('^https?://[^\\s]+$'));
+    }
+
     match /schools/{escola}/series/{serie}/{itensCol}/{itemId}/posts/{postId} {
       // Quem le: aluno com matricula APROVADA naquela serie, mais a
       // coordenacao (moderacao).
@@ -460,7 +575,8 @@ service cloud.firestore {
                     && request.resource.data.uid == request.auth.uid
                     && request.resource.data.keys().hasOnly(
                          ['tipo', 'url', 'label', 'texto', 'uid', 'nome', 'createdAt'])
-                    && request.resource.data.createdAt is number;
+                    && request.resource.data.createdAt is number
+                    && postOk(itemId, postId, request.resource.data);
 
       // igual ao mural antigo: post nao se edita depois de publicado
       allow update: if false;
@@ -494,7 +610,8 @@ service cloud.firestore {
       allow create: if signedIn() && ehMural(col)
                     && request.resource.data.uid == request.auth.uid
                     && request.resource.data.keys().hasOnly(
-                         ['tipo', 'url', 'label', 'texto', 'uid', 'nome', 'createdAt']);
+                         ['tipo', 'url', 'label', 'texto', 'uid', 'nome', 'createdAt'])
+                    && postOk(itemId, postId, request.resource.data);
       allow delete: if signedIn() && ehMural(col)
                     && resource.data.uid == request.auth.uid;
       allow update: if false;

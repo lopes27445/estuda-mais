@@ -886,3 +886,135 @@ describe("A1 · mural exige matrícula aprovada na série", () => {
     await assertSucceeds(deleteDoc(doc(alunoDb, membro("uid-aluno"))));
   });
 });
+
+/* ============ V-16 — valor com tipo e tamanho, id sem aspas (25/09/2026) ====
+   Até aqui as regras fechavam QUAIS campos cada documento aceita, mas não o
+   que vai DENTRO deles. O caso que motivou: `medias` na projeção de notas é
+   escrito pelo navegador do aluno e desenhado na tela da coordenação — um
+   texto com <img onerror> no lugar do número executava script na sessão de
+   quem pode cadastrar staff. Cada teste abaixo é um ataque que passava. */
+describe("V-16 · valores com tipo e tamanho", () => {
+  const SALA = "3B";
+  const nota = {
+    nome: "Aluno Teste", status: "risco", acc: 12, precisa: 8, fechou: false,
+    medias: [6, 6, null, null], atualizado: Date.now()
+  };
+  const projecao = `schools/${ESCOLA}/salas/${SALA}/materias/matematica/notas/uid-aluno`;
+  async function aprovado() {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/salas/${SALA}/alunos/uid-aluno`), {
+        nome: "Aluno Teste", email: "aluno@escola.com", serie: "3", turma: "B",
+        status: "aprovado", pedidoEm: Date.now()
+      });
+    });
+  }
+
+  it("97. aluno NÃO grava `medias` como texto (XSS na tela da coordenação)", async () => {
+    await aprovado();
+    await assertFails(setDoc(doc(alunoDb, projecao),
+      Object.assign({}, nota, { medias: "<img src=x onerror=alert(1)>" })));
+  });
+
+  it("98. aluno NÃO inventa status fora de ok/atencao/risco", async () => {
+    await aprovado();
+    await assertFails(setDoc(doc(alunoDb, projecao),
+      Object.assign({}, nota, { status: "<b>hack</b>" })));
+  });
+
+  it("99. a projeção legítima continua passando", async () => {
+    await aprovado();
+    await assertSucceeds(setDoc(doc(alunoDb, projecao), nota));
+  });
+
+  it("100. transição só entre faixas conhecidas", async () => {
+    await aprovado();
+    const t = `schools/${ESCOLA}/salas/${SALA}/materias/matematica/transicoes`;
+    await assertFails(setDoc(doc(alunoDb, `${t}/t1`),
+      { uid: "uid-aluno", nome: "A", de: "<i>x</i>", para: "risco", quando: Date.now() }));
+    await assertSucceeds(setDoc(doc(alunoDb, `${t}/t2`),
+      { uid: "uid-aluno", nome: "A", de: "atencao", para: "risco", quando: Date.now() }));
+  });
+
+  it("101. perfil: nome gigante e série inventada são recusados", async () => {
+    await assertFails(setDoc(doc(alunoDb, "users/uid-aluno"),
+      { nome: "x".repeat(5000) }, { merge: true }));
+    await assertFails(setDoc(doc(alunoDb, "users/uid-aluno"),
+      { serie: { a: 1 } }, { merge: true }));
+    await assertFails(setDoc(doc(alunoDb, "users/uid-aluno"),
+      { serie: "9" }, { merge: true }));
+  });
+
+  it("102. perfil LEGADO (com role/schoolId) continua atualizando o normal", async () => {
+    await assertSucceeds(setDoc(doc(alunoDb, "users/uid-aluno"),
+      { serie: "2", turma: "C", vestibulares: ["ENEM", "FUVEST"] }, { merge: true }));
+  });
+
+  it("103. painel só com nome conhecido e blob como mapa", async () => {
+    await assertFails(setDoc(doc(alunoDb, "users/uid-aluno/panels/lixo-qualquer"),
+      { blob: {}, updatedAt: Date.now() }));
+    await assertFails(setDoc(doc(alunoDb, "users/uid-aluno/panels/notas-lab3"),
+      { blob: "texto", updatedAt: Date.now() }));
+    for (const p of ["notas", "estudos-lab2", "vestibular-lab3"]) {
+      await assertSucceeds(setDoc(doc(alunoDb, `users/uid-aluno/panels/${p}`),
+        { blob: { k: "v" }, updatedAt: Date.now() }));
+    }
+  });
+
+  it("104. matrícula NÃO aceita e-mail de outra pessoa", async () => {
+    await assertFails(setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/3B/alunos/uid-aluno`), {
+      nome: "Aluno", email: "diretora@escola.com", serie: "3", turma: "B",
+      status: "pendente", pedidoEm: Date.now()
+    }));
+  });
+
+  it("105. matrícula NÃO aceita turma diferente da sala do caminho", async () => {
+    await assertFails(setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/3A/alunos/uid-aluno`), {
+      nome: "Aluno", email: "aluno@escola.com", serie: "1", turma: "B",
+      status: "pendente", pedidoEm: Date.now()
+    }));
+    // turma única: "—" vira "U" no id da sala
+    await assertSucceeds(setDoc(doc(alunoDb, `schools/${ESCOLA}/salas/2U/alunos/uid-aluno`), {
+      nome: "Aluno", email: "aluno@escola.com", serie: "2", turma: "—",
+      status: "pendente", pedidoEm: Date.now()
+    }));
+  });
+
+  it("106. staff: papel inventado e id com maiúscula são recusados", async () => {
+    await assertFails(setDoc(doc(coordDb, `schools/${ESCOLA}/staff/novo@escola.com`),
+      { role: "admin", addedBy: "coord@escola.com", addedAt: Date.now() }));
+    await assertFails(setDoc(doc(coordDb, `schools/${ESCOLA}/staff/Novo@Escola.com`),
+      { role: "professor", addedBy: "coord@escola.com", addedAt: Date.now() }));
+    await assertFails(setDoc(doc(coordDb, `schools/${ESCOLA}/staff/prof@escola.com`),
+      { salas: "3A" }, { merge: true }));
+  });
+
+  it("107. item do calendário com aspa no id NÃO é publicado", async () => {
+    await assertFails(setDoc(doc(profDb, `schools/${ESCOLA}/series/3/provas/x');alert(1)`),
+      { disc: "Biologia" }));
+    await assertSucceeds(setDoc(doc(profDb, `schools/${ESCOLA}/series/3/provas/AbC123xyz`),
+      { disc: "Biologia" }));
+  });
+
+  it("108. mural: link javascript:, texto gigante e id com aspa são recusados", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `schools/${ESCOLA}/series/3/membros/uid-aluno`),
+        { uid: "uid-aluno", nome: "Aluno", sala: "3A", desde: Date.now() });
+    });
+    const base = `schools/${ESCOLA}/series/3/itens-lab2/p1/posts`;
+    const ok = { tipo: "link", url: "https://exemplo.com/a", label: "resumo",
+                 uid: "uid-aluno", nome: "Aluno", createdAt: Date.now() };
+    await assertFails(setDoc(doc(alunoDb, `${base}/a1`),
+      Object.assign({}, ok, { url: "javascript:alert(1)" })));
+    await assertFails(setDoc(doc(alunoDb, `${base}/a2`),
+      { tipo: "texto", texto: "x".repeat(3000), uid: "uid-aluno", nome: "Aluno", createdAt: Date.now() }));
+    await assertFails(setDoc(doc(alunoDb, `${base}/a'3`), ok));
+    await assertFails(setDoc(doc(alunoDb, `${base}/a4`), Object.assign({}, ok, { tipo: "script" })));
+    await assertSucceeds(setDoc(doc(alunoDb, `${base}/a5`), ok));
+  });
+
+  it("109. auditoria com detalhe gigante é recusada", async () => {
+    await assertFails(setDoc(doc(profDb, `schools/${ESCOLA}/auditoria/g1`), {
+      ator: "prof@escola.com", acao: "publicar", alvo: "x", detalhe: "x".repeat(1000), quando: Date.now()
+    }));
+  });
+});

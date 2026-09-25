@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estuda+ · Sua conta</title>
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0e16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Estuda+">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<!-- Página própria para criar conta e recuperar senha (25/09/2026).
+     Antes as duas coisas eram vistas escondidas dentro do card de login: o
+     aluno clicava, o card trocava de conteúdo no mesmo lugar, e a sensação era
+     de formulário improvisado. Aqui cada fluxo tem tela, título e endereço
+     próprios (conta.html#criar e conta.html#recuperar).
+
+     Todo o JS está em app/conta.js — nenhum script embutido, para esta página
+     já nascer compatível com uma CSP sem 'unsafe-inline'. -->
+<link rel="stylesheet" href="app/conta.css">
+<script src="app/env.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="app/theme.js"></script>
+<script src="app/firebase-config.js"></script>
+<script src="app/conta.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <a class="back" id="voltar" href="index.html">‹ Voltar para entrar</a>
+
+  <div class="card">
+    <div class="brand">
+      <svg class="elogo" viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="31" width="10" height="21" rx="3.5" fill="#8fd99b"/><rect x="19" y="23" width="10" height="29" rx="3.5" fill="#54c163"/><rect x="32" y="15" width="10" height="37" rx="3.5" fill="#2fa64a"/><path d="M8 37 L25 50 L60 9" fill="none" stroke="#0f7a30" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="wm">estuda<span>+</span></div>
+      <button id="btn-theme" type="button" title="Alternar tema claro/escuro">🌙</button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <a class="tab" id="tab-criar" href="#criar" role="tab">Criar conta</a>
+      <a class="tab" id="tab-recuperar" href="#recuperar" role="tab">Esqueci a senha</a>
+    </div>
+
+    <!-- já conectado -->
+    <section id="v-logado" class="vista" hidden>
+      <h1>Você já está conectado</h1>
+      <p>Conta atual: <b id="logado-email"></b></p>
+      <div class="acoes">
+        <a class="btn" id="logado-ir" href="index.html">Ir para o Estuda+</a>
+        <button class="btn ghost" id="logado-sair" type="button">Sair desta conta</button>
+      </div>
+    </section>
+
+    <!-- CRIAR CONTA -->
+    <section id="v-criar" class="vista" hidden>
+      <h1>Criar sua conta</h1>
+      <p class="sub">Notas, estudos e vestibular salvos na nuvem — em qualquer aparelho, e nada se perde se trocar de celular.</p>
+      <form id="f-criar" novalidate autocomplete="on">
+        <label for="c-nome">Como quer ser chamado(a)</label>
+        <input id="c-nome" name="name" type="text" autocomplete="name" maxlength="60" placeholder="Seu nome" required>
+
+        <label for="c-email">E-mail</label>
+        <input id="c-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="seu@email.com" required>
+
+        <label for="c-senha">Senha</label>
+        <div class="senha">
+          <input id="c-senha" name="new-password" type="password" autocomplete="new-password" maxlength="128" placeholder="crie uma senha" required>
+          <button type="button" class="olho" data-alvo="c-senha" aria-label="Mostrar senha">👁</button>
+        </div>
+        <ul class="regras" id="c-regras" aria-live="polite">
+          <li data-r="tam">pelo menos 8 caracteres</li>
+          <li data-r="letra">uma letra</li>
+          <li data-r="num">um número</li>
+        </ul>
+
+        <label for="c-senha2">Repita a senha</label>
+        <input id="c-senha2" name="new-password-2" type="password" autocomplete="new-password" maxlength="128" placeholder="a mesma senha" required>
+
+
+        <button class="btn largo" id="c-enviar" type="submit">Criar minha conta</button>
+        <p class="erro" id="c-erro" role="alert"></p>
+      </form>
+      <p class="nota">Tem conta Google? Nem precisa criar senha: volte e toque em <b>Entrar com Google</b>.</p>
+    </section>
+
+    <!-- CONTA CRIADA -->
+    <section id="v-criada" class="vista" hidden>
+      <div class="ok">✓</div>
+      <h1>Conta criada!</h1>
+      <p>Mandamos um link de confirmação para <b id="criada-email"></b>.</p>
+      <p class="sub">Seus painéis já funcionam agora. A confirmação do e-mail é obrigatória só para acesso de professor ou coordenação.</p>
+      <a class="btn largo" id="criada-ir" href="index.html">Entrar no Estuda+</a>
+    </section>
+
+    <!-- RECUPERAR -->
+    <section id="v-recuperar" class="vista" hidden>
+      <h1>Recuperar senha</h1>
+      <p class="sub">Digite o e-mail da sua conta. Vamos mandar um link para você criar uma senha nova.</p>
+      <form id="f-recuperar" novalidate>
+        <label for="r-email">E-mail da conta</label>
+        <input id="r-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="seu@email.com" required>
+        <button class="btn largo" id="r-enviar" type="submit">Enviar link de recuperação</button>
+        <p class="erro" id="r-erro" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- LINK ENVIADO -->
+    <section id="v-enviado" class="vista" hidden>
+      <div class="ok">✉</div>
+      <h1>Confira seu e-mail</h1>
+      <p>Se existir uma conta com <b id="enviado-email"></b>, o link chega em instantes.</p>
+      <ul class="dicas">
+        <li>Remetente: <b>noreply@painel-e5373.firebaseapp.com</b></li>
+        <li>Não chegou em 5 minutos? Olhe <b>Spam</b> e <b>Promoções</b>.</li>
+        <li>O link vale por pouco tempo e funciona uma vez só.</li>
+        <li>Se você sempre entrou com o <b>Google</b>, sua conta não tem senha — use <b>Entrar com Google</b>.</li>
+      </ul>
+      <div class="acoes">
+        <button class="btn ghost" id="enviado-reenviar" type="button">Reenviar</button>
+        <a class="btn" id="enviado-voltar" href="index.html">Voltar para entrar</a>
+      </div>
+      <p class="erro" id="enviado-erro" role="alert"></p>
+    </section>
+
+    <p class="rodape">Grátis · seus dados ficam só na sua conta.</p>
+  </div>
+</main>
+</body>
+</html>

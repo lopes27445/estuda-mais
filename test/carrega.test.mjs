@@ -171,25 +171,96 @@ describe("cloud.js — o portao de entrada", () => {
     assert.doesNotThrow(() => carregaCloud());
   });
 
-  it("tem as tres vistas separadas + a de confirmacao", () => {
+  /* Desde 25/09/2026 criar conta e recuperar senha tem PAGINA PROPRIA
+     (conta.html). O que se trava aqui: os dois links do portao levam para la,
+     cada um na sua aba, e com um `volta` que a pagina aceita. */
+  it("o portao tem a vista de entrar", () => {
+    assert.ok(carregaCloud().includes("cloud-v-login"));
+  });
+
+  it("'Criar conta' e 'Esqueci a senha' levam para conta.html", () => {
     const html = carregaCloud();
-    for (const id of ["cloud-v-login", "cloud-v-signup", "cloud-v-reset", "cloud-v-ok"]) {
-      assert.ok(html.includes(id), `faltou a vista ${id}`);
+    assert.match(html, /id="cloud-signup" href="conta\.html\?volta=[a-z]+\.html#criar"/);
+    assert.match(html, /id="cloud-reset" href="conta\.html\?volta=[a-z]+\.html#recuperar"/);
+  });
+
+  it("as vistas embutidas antigas nao voltaram", () => {
+    const html = carregaCloud();
+    for (const id of ["cloud-v-signup", "cloud-v-reset", "cloud-su-btn", "cloud-rs-btn"]) {
+      assert.ok(!html.includes(id), `vista antiga de volta: ${id}`);
     }
   });
 
-  it("criar conta tem campo de confirmar senha e botao proprio", () => {
-    const html = carregaCloud();
-    assert.ok(html.includes("cloud-su-pass2"), "faltou repetir a senha");
-    assert.ok(html.includes("cloud-su-btn"), "faltou o botao de criar conta");
-    assert.ok(html.includes("cloud-rs-btn"), "faltou o botao de enviar recuperacao");
+  it("os e-mails do Firebase saem em portugues", () => {
+    /* sem languageCode o projeto manda o modelo em ingles ("Reset your
+       password for…") — era metade do "esqueci a senha nao funciona" */
+    const src = readFileSync(new URL("../public/app/cloud.js", import.meta.url), "utf8");
+    assert.match(src, /auth\.languageCode\s*=\s*"pt-BR"/);
+  });
+});
+
+/**
+ * conta.html / conta.js — criar conta e recuperar senha.
+ * As regras puras ficam em window.ContaUtil para poderem ser testadas sem DOM.
+ */
+function carregaConta() {
+  const src = readFileSync(new URL("../public/app/conta.js", import.meta.url), "utf8");
+  const win = {};
+  const doc = { documentElement: { classList: { add() {}, remove() {} } } }; // sem getElementById: para antes do DOM
+  new Function("window", "document", "localStorage", src)(win, doc, { getItem: () => null });
+  return win.ContaUtil;
+}
+
+describe("conta.js — criar conta e recuperar senha", () => {
+  const U = carregaConta();
+
+  it("'volta' so aceita paginas do proprio app (sem redirecionador aberto)", () => {
+    for (const ok of ["index.html", "notas.html", "estudos.html", "vestibular.html", "admin.html"]) {
+      assert.equal(U.voltaSegura(ok), ok);
+    }
+    for (const ruim of ["https://evil.example/login", "//evil.example", "javascript:alert(1)",
+                        "../index.html", "index.html#x", "", null, undefined, "conta.html"]) {
+      assert.equal(U.voltaSegura(ruim), "index.html", String(ruim));
+    }
   });
 
-  it("da caminho de volta para entrar em toda vista secundaria", () => {
-    const html = carregaCloud();
-    for (const id of ["cloud-su-back", "cloud-rs-back", "cloud-ok-back"]) {
-      assert.ok(html.includes(id), `vista sem volta: ${id}`);
+  it("senha nova: 8+ caracteres, com letra e numero", () => {
+    assert.equal(U.senhaOk("abc123"), false, "6 caracteres nao basta");
+    assert.equal(U.senhaOk("abcdefgh"), false, "sem numero");
+    assert.equal(U.senhaOk("12345678"), false, "sem letra");
+    assert.equal(U.senhaOk("estuda2026"), true);
+    assert.equal(U.senhaOk("ação1234"), true, "acento conta como letra");
+  });
+
+  it("e-mail: recusa o que nao e e-mail e o que poderia virar HTML", () => {
+    assert.equal(U.emailOk("aluno@escola.com"), true);
+    for (const ruim of ["", "aluno", "aluno@", "@escola.com", "a b@c.com", "<x>@a.com", "a@b"]) {
+      assert.equal(U.emailOk(ruim), false, ruim);
     }
+  });
+
+  it("nome: tira sinal de tag e caractere de controle, e corta em 60", () => {
+    assert.equal(U.nomeLimpo("  Ana  <b>Maria</b>\u0000 "), "Ana bMaria/b");
+    assert.equal(U.nomeLimpo("x".repeat(100)).length, 60);
+  });
+
+  it("mensagens de erro em portugues, sem vazar se a conta existe no reset", () => {
+    assert.match(U.mapErro({ code: "auth/too-many-requests" }), /tentativas/);
+    assert.match(U.mapErro({ code: "auth/weak-password" }), /8 caracteres/);
+    const src = readFileSync(new URL("../public/app/conta.js", import.meta.url), "utf8");
+    // user-not-found no reset e tratado como sucesso (mesma tela de "confira seu e-mail")
+    assert.match(src, /auth\/user-not-found"\) return;/);
+  });
+
+  it("conta.html nao tem script embutido (pronta para CSP sem unsafe-inline)", () => {
+    const html = readFileSync(new URL("../public/conta.html", import.meta.url), "utf8");
+    assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(html), "script embutido em conta.html");
+    assert.ok(!/\son[a-z]+=/i.test(html), "handler inline (onclick=…) em conta.html");
+  });
+
+  it("o service worker conhece a pagina nova", () => {
+    const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+    for (const f of ["./conta.html", "./app/conta.js", "./app/conta.css"]) assert.ok(sw.includes(f), f);
   });
 });
 
