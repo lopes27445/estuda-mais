@@ -111,7 +111,12 @@ describe("Comunicado · do PDF ao card", () => {
   it("o conteúdo acentuado também chega inteiro", () => {
     const r = CalParse.parse(montaLinhas(comunicadoTokens()).join("\n"), 2026);
     const mat = r.items.find((i) => i.disc === "Matemática");
-    assert.ok(mat.topics.join(" ").includes("Módulo"), JSON.stringify(mat.topics));
+    /* O CalParse agora normaliza "Módulo 3" para "Mód. 3" ao compor o tópico,
+       então procurar a palavra "Módulo" inteira deixou de valer. A assertiva
+       abaixo continua provando a MESMA coisa, e um pouco mais: se o acento
+       tivesse vindo partido ("M ó dulo 3", que era o bug), RE_MOD não casaria
+       e a linha cairia como texto livre — sobraria "M ó dulo 3", não "Mód. 3". */
+    assert.deepEqual(mat.topics, ["Mód. 3"], JSON.stringify(mat.topics));
   });
 
   it("REGRESSÃO: juntando tudo com espaço, a matéria deixa de ancorar", () => {

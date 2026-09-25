@@ -107,6 +107,49 @@ describe("Comunicado real · calendário de provas de agosto/2026", () => {
     assert.ok(por("Geografia").topics.some((t) => /Geografia e Indústria/.test(t)));
   });
 
+  it("o conteúdo vira UMA linha por bloco, não três fragmentos", () => {
+    /* Era a queixa: "fica feio quando lança o doc no sistema". A prova de
+       Física chegava como três caixas de checklist —
+         "Frente 1 - Prof. Medina" / "Livro 5 - Módulos 27 a 30" / "Temas: Dinâmica"
+       — sendo uma prova só, com o professor virando item de estudo. */
+    assert.deepEqual(por("Física").topics,
+      ["Frente 1 (Medina) · Livro 5 · Mód. 27–30 — Dinâmica"]);
+    assert.deepEqual(por("Geografia").topics,
+      ["Frente 171 · Livro 4 · Mód. 22 — Geografia e Indústria"]);
+    assert.deepEqual(por("Biologia").topics,
+      ["Frente 1 (Brunna) · Livros 4 e 5 · Mód. 20–26 — Núcleo celular, replicação, transcrição e tradução"]);
+  });
+
+  it("o professor sai do meio do conteúdo e vai para o campo dele", () => {
+    /* A regra de professor só olhava o INÍCIO da linha, então em
+       "Frente 1 - Prof. Medina" o nome ficava preso no conteúdo e o campo
+       `prof` vinha vazio — em 4 das 12 matérias. */
+    for (const [disc, prof] of Object.entries({
+      "Física": "Prof. Medina", "Química": "Prof. Marcus",
+      "Biologia": "Profa. Brunna", "Matemática 2": "Prof. Gabriel"
+    })) {
+      assert.equal(por(disc).prof, prof, disc + " sem professor");
+    }
+  });
+
+  it("os módulos viram intervalo só quando o documento diz intervalo", () => {
+    // "Módulos 8, 9" é lista; "Módulos 27 a 30" e "10 ao 13" são intervalo
+    assert.match(por("Inglês").topics[0], /Mód\. 8 e 9/);
+    assert.match(por("História").topics[0], /Mód\. 10–13/);
+    assert.match(por("Filosofia").topics[0], /Mód\. 11 e 12/);
+    // "32, 33 e 34" são 3 consecutivos → vira faixa
+    assert.match(por("Matemática 2").topics[0], /Mód\. 32–34/);
+  });
+
+  it("nenhum tópico sobra só com o nome do professor", () => {
+    for (const it of r.items) {
+      for (const t of it.topics) {
+        assert.ok(!/^Frente\s*\d+\s*$/.test(t), it.disc + ': tópico vazio "' + t + '"');
+        assert.ok(!/^Profa?\b/.test(t), it.disc + ': professor virou tópico "' + t + '"');
+      }
+    }
+  });
+
   it("o rodapé da escola não vira item nem conteúdo", () => {
     assert.ok(!r.items.some((i) => /COC Atibaia|Rede Única/.test(i.disc)));
     const todos = r.items.flatMap((i) => i.topics).join(" ");

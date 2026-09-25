@@ -83,6 +83,134 @@
     return false;
   }
 
+  /* ---------- Composição do conteúdo --------------------------------------
+     O laço do parse coleta CADA linha do comunicado como um tópico separado.
+     Isso é fiel ao documento, mas o que chega ao aluno é um checklist de
+     fragmentos — na prova de Física, três caixas para marcar:
+
+       Frente 1 - Prof. Medina
+       Livro 5 - Módulos 27 a 30
+       Temas: Dinâmica
+
+     São a mesma prova, e o nome do professor virou item de estudo (pior: o
+     campo `prof` ficava vazio, porque a regra de professor só olha o começo
+     da linha). O calendário legado, escrito à mão em estudos.app.js, mostra
+     o formato que funciona:
+
+       Frente 1 (Medina) · Livro 5 · Mód. 27–30 — Dinâmica
+
+     Esta passagem reconstrói aquele formato: fatia cada linha em (frente,
+     livro, módulos, tema, professor), junta as linhas estruturais com o tema
+     que vem depois e emite uma linha por bloco. Não inventa conteúdo — só
+     reagrupa e normaliza o que o parser já tinha coletado. */
+
+  /* Sem flag `i` de propósito: "professor" em minúscula, no meio de uma frase
+     ("estudar o material extra do professor"), é texto, não atribuição. */
+  var RE_PROF = /\bProf(?:essor)?a?\.?\s*:?\s*([A-ZÀ-Ý][^\s,;:()\/]*(?:\s+[A-ZÀ-Ý][^\s,;:()\/]*)*)/;
+  var SEP = "[\\s:.\\-–—]*";
+  var RE_FRENTE = new RegExp("^Frentes?" + SEP + "(\\d+)", "i");
+  var RE_LIVRO = new RegExp("^Livros?" + SEP + "(único|única|\\d+(?:\\s*(?:,|e|ao|a)\\s*\\d+)*)", "i");
+  var RE_MOD = new RegExp("^M[óo]d(?:ulos?)?\\.?" + SEP + "(\\d+(?:\\s*(?:,|e|ao|a|[–-])\\s*\\d+)*)", "i");
+  var LIXO = /^[\s:.\-–—,;]+/;
+
+  /* "27 a 30" → "27–30" · "8, 9" → "8 e 9" · "32, 33 e 34" → "32–34".
+     Vira intervalo só quando o documento diz intervalo ("a"/"ao"/travessão)
+     ou quando são 3+ números consecutivos. Com dois números soltos fica a
+     lista, para não afirmar uma faixa que o comunicado não afirmou. */
+  function fmtNums(s) {
+    var n = (s.match(/\d+/g) || []).map(Number);
+    if (!n.length) return s.trim();
+    if (n.length === 1) return String(n[0]);
+    var intervalo = /\d\s*(?:ao|a|[–-])\s*\d/i.test(s);
+    var consec = true;
+    for (var i = 1; i < n.length; i++) if (n[i] !== n[i - 1] + 1) { consec = false; break; }
+    if ((intervalo && n.length === 2) || (consec && n.length > 2)) return n[0] + "–" + n[n.length - 1];
+    if (n.length === 2) return n[0] + " e " + n[1];
+    return n.slice(0, -1).join(", ") + " e " + n[n.length - 1];
+  }
+
+  function fatiar(ln) {
+    var f = { frente: "", livro: "", mods: "", tema: "", prof: "", profFull: "", profBloco: "" };
+    var s = String(ln || "");
+    var mp = s.match(RE_PROF);
+    if (mp) {
+      f.prof = mp[1].replace(/[\s:.\-–]+$/, "").trim();
+      f.profFull = mp[0].replace(/[\s:.\-–]+$/, "").trim();
+      s = s.slice(0, mp.index) + " " + s.slice(mp.index + mp[0].length);
+    }
+    s = s.replace(/\s+/g, " ").trim();
+    for (var g = 0, m; g < 8 && s; g++) {
+      if ((m = s.match(LIXO))) { s = s.slice(m[0].length); continue; }
+      if ((m = s.match(RE_FRENTE))) { f.frente = "Frente " + m[1]; s = s.slice(m[0].length); continue; }
+      if ((m = s.match(RE_LIVRO))) {
+        var v = m[1];
+        f.livro = /^[úu]nic/i.test(v) ? "Livro único"
+          : ((v.match(/\d+/g) || []).length > 1 ? "Livros " : "Livro ") + fmtNums(v);
+        s = s.slice(m[0].length); continue;
+      }
+      if ((m = s.match(RE_MOD))) { f.mods = "Mód. " + fmtNums(m[1]); s = s.slice(m[0].length); continue; }
+      break;
+    }
+    s = s.replace(LIXO, "").trim();
+    var mt = s.match(/^Temas?\s*:?\s*(.+)$/i);
+    f.tema = (mt ? mt[1] : s).replace(/[\s.,;:–-]+$/, "").trim();
+    if (f.frente && f.prof) f.profBloco = f.prof;
+    return f;
+  }
+
+  function comporTopics(it) {
+    var blocos = [], atual = null;
+    function estrutural(f) { return !!(f.frente || f.livro || f.mods); }
+    function fecha() { if (atual) { blocos.push(atual); atual = null; } }
+
+    it.topics.forEach(function (ln) {
+      var f = fatiar(ln);
+      if (f.profFull && !it.prof) it.prof = f.profFull;
+
+      if (!estrutural(f)) {
+        if (!f.tema) return;
+        /* Texto livre fecha o bloco aberto se ele ainda não tem tema — é o
+           caso de "Temas: Dinâmica" logo abaixo de "Livro 5 - Módulos…". */
+        if (atual && !atual.tema) { atual.tema = f.tema; fecha(); }
+        else { fecha(); blocos.push({ frente: "", livro: "", mods: "", tema: f.tema, profBloco: "" }); }
+        return;
+      }
+      if (!atual) { atual = f; if (atual.tema) fecha(); return; }
+
+      /* Repetir um campo que já está preenchido com outro valor significa que
+         começou outro bloco (a 2ª frente da mesma prova, por exemplo). */
+      var conflito = !!atual.tema
+        || (f.frente && atual.frente && f.frente !== atual.frente)
+        || (f.livro && atual.livro && f.livro !== atual.livro)
+        || (f.mods && atual.mods && f.mods !== atual.mods);
+
+      if (conflito) {
+        var frenteAnt = atual.frente, livroAnt = atual.livro, profAnt = atual.profBloco;
+        fecha();
+        atual = f;
+        // "Mód. X" solto embaixo de uma frente continua sendo daquela frente
+        if (!atual.frente) { atual.frente = frenteAnt; atual.profBloco = profAnt; }
+        if (!atual.livro && atual.mods) atual.livro = livroAnt;
+      } else {
+        if (f.frente) { atual.frente = f.frente; if (f.profBloco) atual.profBloco = f.profBloco; }
+        if (f.livro) atual.livro = f.livro;
+        if (f.mods) atual.mods = f.mods;
+        if (f.tema) atual.tema = f.tema;
+      }
+      if (atual && atual.tema) fecha();
+    });
+    fecha();
+
+    return blocos.map(function (b) {
+      var p = [];
+      if (b.frente) p.push(b.frente + (b.profBloco ? " (" + b.profBloco + ")" : ""));
+      if (b.livro) p.push(b.livro);
+      if (b.mods) p.push(b.mods);
+      var cab = p.join(" · ");
+      return cab && b.tema ? cab + " — " + b.tema : (cab || b.tema);
+    }).filter(Boolean);
+  }
+
   function parse(text, ano) {
     ano = ano || (new Date().getFullYear());
     var raw = String(text || "").split(/\r?\n/);
@@ -107,7 +235,7 @@
     function newItem(disc) { return { tipo: tipo, disc: disc, area: AREA[disc] || "", data: "", datas: [], prof: "", mod: "", topics: [], note: "" }; }
     function addContent(it, ln) {
       if (/^Modalidade/i.test(ln)) { it.mod = ln.replace(/^Modalidade\s*[-:]\s*/i, ""); return; }
-      if (/^Prof[a]?\b/i.test(ln) && !/Frente|Livro|M[óo]dulo|Tema/i.test(ln) && ln.length < 40) { it.prof = (it.prof ? it.prof + " · " : "") + ln; return; }
+      if (/^Prof[a]?\b/i.test(ln) && !/Frente|Livro|M[óo]dulo|Tema/i.test(ln) && ln.length < 40) { it.prof = (it.prof ? it.prof + " · " : "") + ln.replace(/[\s:.\-–]+$/, ""); return; }
       if (/^\(/.test(ln)) { it.note = (it.note ? it.note + " " : "") + ln.replace(/[()]/g, ""); return; }
       if (it.topics.length && !isTopicStart(ln)) it.topics[it.topics.length - 1] += " " + ln;
       else it.topics.push(ln);
@@ -149,6 +277,7 @@
         if (it.datas.length > 1) it.note = (it.note ? it.note + " · " : "") + "Entregas: " + it.datas.map(fmtBR).join(", ");
       }
       it.topics = it.topics.map(norm).filter(Boolean);
+      it.topics = comporTopics(it);
       delete it.datas;
     });
 
