@@ -122,3 +122,18 @@ Com as coleções vazias, apagar o bloco do mural antigo das regras e o
   professor o mural de **todas** as séries, que é o vazamento de escopo pelo
   qual o B2 foi aposentado. Se ele precisar, entra depois com escopo por sala.
 - **Coordenação:** lê e apaga qualquer post (moderação e pedido de exclusão).
+
+## Execução real — 26/09/2026
+
+| Passo | Estado |
+|---|---|
+| 1. Regras aditivas | ✅ publicadas em 25/09 |
+| 2. Backfill | ✅ 1 vínculo (1ª B). A 1ª simulação dizia "0 aprovados": salas eram documentos fantasmas — corrigido em `a387b60` |
+| 3. Posts | ✅ 1 recado (`murals/pr-ing` → série 3, prova embutida). Mesma causa da simulação zerada |
+| 4. Cliente | ✅ lab2/lab3 em 25/09; produção por `hosting:clone painel-e5373-lab2:live painel-e5373:live` |
+| 5. Fechar o mural antigo | ✅ regras publicadas e conferidas; leitura real devolve PERMISSION_DENIED |
+| 6. Limpeza | ⏳ **esperar alguns dias** de uso normal, depois `limpeza` e `limpeza --executar` |
+| 7. Bloco morto | ⏳ depois do 6 |
+
+Produção agora recebe o build do `painel-lab`, nunca mais do `painel-beta`
+(o `firebase.json` de lá foi renomeado para falhar alto).
