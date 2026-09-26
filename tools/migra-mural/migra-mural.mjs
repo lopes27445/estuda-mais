@@ -75,30 +75,35 @@ console.log(`\n=== migra-mural · fase "${fase}" · ${marca} ===\n`);
    Todo aluno JÁ aprovado precisa do vínculo, senão o mural fecha na cara de
    quem sempre teve acesso. A série sai do id da sala ("3A" → "3"). */
 async function backfill() {
-  const salas = await db.collection(`schools/${ESCOLA}/salas`).get();
+  /* CORREÇÃO 26/09/2026 — mesmo defeito do posts(): a matrícula é gravada em
+     `salas/{sala}/alunos/{uid}` sem ninguém criar `salas/{sala}`, e listar
+     `salas` não devolve documento fantasma. A simulação dizia "0 aprovados"
+     com 1 aprovado no banco. Agora busca por collectionGroup e filtra aqui
+     (filtrar no servidor exigiria um índice de grupo que não existe). */
+  const grupo = await db.collectionGroup("alunos").get();
+  const aprovados = grupo.docs.filter((a) =>
+    a.ref.path.startsWith(`schools/${ESCOLA}/salas/`) && a.get("status") === "aprovado");
   let achados = 0, escritos = 0;
   const lote = db.batch();
 
-  for (const sala of salas.docs) {
-    const alunos = await sala.ref.collection("alunos").where("status", "==", "aprovado").get();
-    for (const a of alunos.docs) {
-      const serie = String(sala.id).charAt(0);
-      if (!SERIES.includes(serie)) {
-        console.warn(`  ! sala "${sala.id}" não começa com série conhecida — pulando ${a.id}`);
-        continue;
-      }
-      achados++;
-      const destino = db.doc(`schools/${ESCOLA}/series/${serie}/membros/${a.id}`);
-      const ja = await destino.get();
-      if (ja.exists) continue;
-      escritos++;
-      console.log(`  + membro ${serie}/${a.id}  (sala ${sala.id})`);
-      if (executar) {
-        lote.set(destino, {
-          uid: a.id, nome: (a.data() || {}).nome || "Aluno",
-          sala: sala.id, desde: Date.now()
-        });
-      }
+  for (const a of aprovados) {
+    const sala = a.ref.parent.parent;              // salas/{sala}
+    const serie = String(sala.id).charAt(0);
+    if (!SERIES.includes(serie)) {
+      console.warn(`  ! sala "${sala.id}" não começa com série conhecida — pulando ${a.id}`);
+      continue;
+    }
+    achados++;
+    const destino = db.doc(`schools/${ESCOLA}/series/${serie}/membros/${a.id}`);
+    const ja = await destino.get();
+    if (ja.exists) continue;
+    escritos++;
+    console.log(`  + membro ${serie}/${a.id}  (sala ${sala.id})`);
+    if (executar) {
+      lote.set(destino, {
+        uid: a.id, nome: (a.data() || {}).nome || "Aluno",
+        sala: sala.id, desde: Date.now()
+      });
     }
   }
   if (executar && escritos) await lote.commit();
@@ -110,6 +115,16 @@ async function backfill() {
    corrigindo. Ela é reconstruída pelo itemId, olhando onde a prova/PC foi
    publicada. Post cujo item sumiu do calendário NÃO é descartado em silêncio:
    é listado no fim para decisão humana. */
+/* Provas e produções EMBUTIDAS no app (PROVAS/PC em estudos.app.js) só
+   aparecem para a 3ª série — builtin() devolve [] para as outras —, então um
+   post num item embutido é da 3ª. Sem isto, o recado de `murals/pr-ing`
+   (achado em 26/09/2026) ficava órfão. Os ids saem do próprio fonte para não
+   existir uma segunda lista que desatualiza. */
+function itensEmbutidos() {
+  const src = readFileSync(resolve(raiz, "public/app/estudos.app.js"), "utf8");
+  return [...src.matchAll(/id:"((?:pr|pc)-[a-z0-9-]+)"/g)].map((m) => m[1]);
+}
+
 async function mapaItemParaSerie() {
   const mapa = new Map();
   for (const serie of SERIES) {
@@ -118,7 +133,30 @@ async function mapaItemParaSerie() {
       q.docs.forEach((d) => mapa.set(d.id, serie));
     }
   }
+  for (const id of itensEmbutidos()) if (!mapa.has(id)) mapa.set(id, "3");
   return mapa;
+}
+
+/* CORREÇÃO 26/09/2026: a versão anterior listava `db.collection("murals")`
+   e descia em cada item. Só que o app antigo gravava o recado direto em
+   `murals/{item}/posts/{post}` SEM criar `murals/{item}` — no Firestore isso
+   é um documento "fantasma", que a listagem da coleção não devolve. A
+   simulação dizia "0 posts" com o mural cheio, e a limpeza nunca apagaria
+   nada. Agora os posts são achados por collectionGroup e agrupados pelo item
+   do caminho, exista o documento pai ou não. */
+async function postsAntigos() {
+  const todos = await db.collectionGroup("posts").get();
+  const porOrigem = {};
+  for (const p of todos.docs) {
+    const item = p.ref.parent.parent;            // murals/{item}
+    const col = item && item.parent;             // murals
+    if (!col || col.parent !== null) continue;   // só coleções de raiz
+    if (!(col.id in AMBIENTES)) continue;
+    const grupo = (porOrigem[col.id] = porOrigem[col.id] || new Map());
+    if (!grupo.has(item.id)) grupo.set(item.id, []);
+    grupo.get(item.id).push(p);
+  }
+  return porOrigem;
 }
 
 async function posts() {
@@ -126,30 +164,28 @@ async function posts() {
   console.log(`  itens de calendário conhecidos: ${mapa.size}\n`);
   let movidos = 0;
   const orfaos = [];
+  const porOrigem = await postsAntigos();
 
   for (const [origem, destinoCol] of Object.entries(AMBIENTES)) {
-    const itens = await db.collection(origem).get();
-    if (itens.empty) continue;
+    const itens = porOrigem[origem];
+    if (!itens || !itens.size) continue;
     console.log(`  --- ${origem} → ${destinoCol} (${itens.size} item(ns)) ---`);
 
-    for (const item of itens.docs) {
-      const serie = mapa.get(item.id);
-      const ps = await item.ref.collection("posts").get();
-      if (ps.empty) continue;
-
+    for (const [itemId, ps] of itens) {
+      const serie = mapa.get(itemId);
       if (!serie) {
-        orfaos.push({ origem, itemId: item.id, posts: ps.size });
+        orfaos.push({ origem, itemId, posts: ps.length });
         continue;
       }
       const lote = db.batch();
-      ps.docs.forEach((p) => {
+      ps.forEach((p) => {
         const destino = db.doc(
-          `schools/${ESCOLA}/series/${serie}/${destinoCol}/${item.id}/posts/${p.id}`
+          `schools/${ESCOLA}/series/${serie}/${destinoCol}/${itemId}/posts/${p.id}`
         );
         if (executar) lote.set(destino, p.data());
       });
-      movidos += ps.size;
-      console.log(`    ${item.id} → série ${serie} · ${ps.size} post(s)`);
+      movidos += ps.length;
+      console.log(`    ${itemId} → série ${serie} · ${ps.length} post(s)`);
       if (executar) await lote.commit();
     }
   }
@@ -170,17 +206,18 @@ async function limpeza() {
     console.log("  Simulação: listando o que SERIA apagado.\n");
   }
   let total = 0;
+  const porOrigem = await postsAntigos();   // mesma correção do posts(): pais fantasmas
   for (const origem of Object.keys(AMBIENTES)) {
-    const itens = await db.collection(origem).get();
-    for (const item of itens.docs) {
-      const ps = await item.ref.collection("posts").get();
-      total += ps.size;
-      console.log(`  - ${origem}/${item.id} · ${ps.size} post(s)`);
+    const itens = porOrigem[origem];
+    if (!itens) continue;
+    for (const [itemId, ps] of itens) {
+      total += ps.length;
+      console.log(`  - ${origem}/${itemId} · ${ps.length} post(s)`);
       if (executar) {
         const lote = db.batch();
-        ps.docs.forEach((p) => lote.delete(p.ref));
+        ps.forEach((p) => lote.delete(p.ref));
         await lote.commit();
-        await item.ref.delete();
+        await db.doc(`${origem}/${itemId}`).delete();
       }
     }
   }
