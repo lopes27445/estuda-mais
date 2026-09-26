@@ -54,8 +54,15 @@ if (!["backfill", "posts", "limpeza"].includes(fase)) {
   console.error("Uso: node tools/migra-mural/migra-mural.mjs <backfill|posts|limpeza> [--executar]");
   process.exit(1);
 }
-/* credencial: chave de serviço se existir, senão o login do Firebase CLI
-   (ver tools/credencial.mjs — desde 25/09/2026 a chave é opcional) */
+/* Esta ferramenta PRECISA da chave de serviço. O set-admin-claim roda com o
+   login do Firebase CLI, mas o cliente do Firestore do firebase-admin só
+   aceita chave de serviço ou ADC — com o login do CLI ele recusa na hora de
+   abrir o banco (conferido em 25/09/2026). */
+if (!existsSync(chave)) {
+  console.error("Falta .secrets/service-account.json — veja o cabeçalho deste arquivo.\n" +
+    "(Esta ferramenta não funciona com o login do Firebase CLI; só com a chave.)");
+  process.exit(1);
+}
 const cred = credencial();
 initializeApp({ credential: cred.credential, projectId: PROJETO });
 console.log(`(credencial: ${cred.via})`);
