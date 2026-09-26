@@ -540,7 +540,6 @@
      Estuda+: perfil, papel (por e-mail) e onboarding
      ============================================================ */
   var SCHOOL = "coc-atibaia";
-  var MASTER = "luizanthonylopes@gmail.com";
 
   // Vestibulares que a pessoa pode escolher pra acompanhar (até 3) — mesma lista/chaves
   // usadas em vestibular.app.js (EXAMS/VEST_INFO), só nome pra exibir aqui no onboarding.
@@ -555,20 +554,14 @@
      nenhum com o que a pessoa realmente leciona.
      Continua caindo pra "aluno" em qualquer falha — degradar pra menos poder,
      nunca pra mais. */
-  /* V-10, primeira metade: o poder de dono já pode vir de uma custom claim
-     (`admin: true`) no token, gravada por `tools/set-admin-claim.mjs` com o
-     Admin SDK rodando nesta máquina — não é Cloud Functions e não exige plano
-     pago. A regra do Firestore aceita as duas formas (ver `ehMaster()` lá).
-
-     O e-mail fixo continua ao lado DE PROPÓSITO. Enquanto a claim não estiver
-     valendo num token já renovado, tirá-lo tranca o dono para fora: depois da
-     V-01 só coordenação cadastra staff, e se o documento de coordenação sumir
-     não existe outro caminho de volta. A ordem segura (gerar chave → rodar o
-     script → sair e entrar → conferir → só então apagar o e-mail) está em
-     Estuda+/Passos Manuais no Console.md. */
+  /* V-10 completa (25/09/2026): o poder de dono vem só da custom claim
+     `admin: true`, gravada por `tools/set-admin-claim.mjs` com o Admin SDK.
+     O e-mail fixo que existia aqui (e nas regras) saiu: estava num
+     repositório público, não tinha rotação nem auditoria. Esta função só
+     decide o que a TELA mostra — quem manda de verdade é `ehMaster()` nas
+     regras, que também passou a olhar só a claim. */
   function ehDono() {
     if (!user) return Promise.resolve(false);
-    if (user.email === MASTER) return Promise.resolve(true);
     // a claim só aparece em token renovado — por isso o passo "sair e entrar"
     return user.getIdTokenResult()
       .then(function (t) { return !!(t && t.claims && t.claims.admin === true); })

@@ -358,6 +358,19 @@ describe("V-10 · poder de dono por custom claim", () => {
     );
   });
 
+  it("65b. o e-mail do dono SEM a claim não dá mais poder (V-10 completa)", async () => {
+    /* Até 25/09/2026 as regras tinham o e-mail do dono escrito por extenso,
+       com poder global. Agora só a claim vale: quem entrar com esse e-mail sem
+       a claim (conta recriada, claim retirada) é gente comum. */
+    const soEmail = env.authenticatedContext("uid-so-email", {
+      email: "luizanthonylopes@gmail.com", email_verified: true
+    }).firestore();
+    await assertFails(getDocs(collection(soEmail, `schools/${ESCOLA}/staff`)));
+    await assertFails(
+      setDoc(doc(soEmail, `schools/${ESCOLA}/staff/novo@escola.com`), { role: "coordenacao" })
+    );
+  });
+
   it("66. claim ausente ou falsa não dá poder nenhum", async () => {
     const falsoDb = env.authenticatedContext("uid-falso-admin", {
       email: "ninguem@example.com", email_verified: true, admin: false

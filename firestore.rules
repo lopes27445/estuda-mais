@@ -66,22 +66,18 @@ service cloud.firestore {
       return escola == 'coc-atibaia';
     }
 
-    // V-10, primeira metade: a claim já vale. `tools/set-admin-claim.mjs`
-    // grava `admin:true` no token com o Admin SDK rodando na máquina do dono
-    // — não é Cloud Functions, não é plano pago.
-    //
-    // O e-mail fixo continua ao lado DE PROPÓSITO, e sai numa segunda etapa.
-    // Motivo: enquanto a claim não estiver valendo num token renovado, tirar o
-    // e-mail tranca o dono para fora — só coordenação cadastra staff (V-01), e
-    // se o documento de coordenação sumir não há outro caminho de volta.
-    // A ordem segura é: gerar a chave → rodar o script → sair e entrar de novo
-    // → confirmar que ⚙️ Gestão ainda abre → SÓ ENTÃO apagar a linha do e-mail.
+    // V-10 completa (25/09/2026): o poder de dono vem SÓ da custom claim
+    // `admin`, que apenas o Admin SDK grava (tools/set-admin-claim.mjs).
+    // O e-mail fixo que ficava aqui ao lado saiu depois de conferido no
+    // próprio Firebase que a claim está na conta do dono (customClaims
+    // {admin:true}, e-mail verificado, login Google).
+    // Devolver ou tirar o poder:  node tools/set-admin-claim.mjs <e-mail> [--tirar]
+    // A claim só aparece num token renovado — sair e entrar de novo no app.
     function temClaimAdmin() {
       return request.auth.token.get('admin', false) == true;
     }
     function ehMaster() {
-      return verificado()
-             && (temClaimAdmin() || myEmail() == 'luizanthonylopes@gmail.com');
+      return verificado() && temClaimAdmin();
     }
 
     function staffDoc(escola) {

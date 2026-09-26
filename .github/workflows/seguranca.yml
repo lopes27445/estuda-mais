@@ -80,3 +80,10 @@ jobs:
             echo "::error::V-11 de volta: o cliente está gravando role/schoolId em users/{uid}."
             exit 1
           fi
+
+      - name: E-mail fixo com poder global não pode voltar (V-10)
+        run: |
+          if grep -nE "myEmail\(\) *== *'|var MASTER *=" firestore.rules public/app/cloud.js ; then
+            echo "::error::V-10 de volta: e-mail escrito nas regras ou no cloud.js. O poder de dono vem só da custom claim admin (tools/set-admin-claim.mjs)."
+            exit 1
+          fi
