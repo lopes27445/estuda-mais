@@ -43,10 +43,16 @@ async function authDomainDoSite(site) {
   return d;
 }
 
+/* Desde 25/09/2026 a chave web só aceita pedidos vindos dos sites do
+   projeto (restrição de referenciador no Google Cloud). Esta ferramenta roda
+   fora do navegador, então se apresenta como o site de produção — que é de
+   onde o app faz exatamente estas mesmas chamadas. */
+const ORIGEM = { Referer: "https://painel-e5373.web.app/" };
+
 /* Lista 1 — Firebase Console → Authentication → Authorized domains.
    Faltando aqui, o app recebe auth/unauthorized-domain (dá pra tratar em JS). */
 async function lista1() {
-  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/projects?key=${API_KEY}`);
+  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/projects?key=${API_KEY}`, { headers: ORIGEM });
   if (!r.ok) throw new Error(`getProjectConfig HTTP ${r.status}`);
   return (await r.json()).authorizedDomains || [];
 }
@@ -57,7 +63,7 @@ async function lista1() {
 async function lista2(authDomain) {
   const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${API_KEY}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...ORIGEM },
     body: JSON.stringify({ providerId: "google.com", continueUri: `https://${authDomain}/__/auth/handler` })
   });
   if (!r.ok) throw new Error(`createAuthUri HTTP ${r.status}`);
