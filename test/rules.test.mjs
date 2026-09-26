@@ -1063,3 +1063,36 @@ describe("V-23 · vínculo de membro", () => {
     await assertSucceeds(getDocs(collection(alunoDb, `schools/${ESCOLA}/series/3/itens-lab2/p1/posts`)));
   });
 });
+
+/* ============ A1 — mural antigo (raiz) fechado ============
+   `murals/{item}/posts` era legível por qualquer conta logada. Depois da
+   migração (26/09/2026) e com produção no cliente novo, o caminho fecha:
+   ninguém lê nem escreve; só a coordenação apaga, para a limpeza final. */
+describe("A1 · mural antigo fechado", () => {
+  const antigo = "murals/pr-ing/posts";
+  async function recadoAntigo() {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${antigo}/r1`),
+        { tipo: "texto", texto: "alguém tem o resumo?", uid: "uid-aluno", nome: "Aluno", createdAt: Date.now() });
+    });
+  }
+
+  it("113. conta logada NÃO lê mais o mural antigo — era o vazamento", async () => {
+    await recadoAntigo();
+    await assertFails(getDocs(collection(alunoDb, antigo)));
+    await assertFails(getDoc(doc(alunoDb, `${antigo}/r1`)));
+  });
+
+  it("114. ninguém escreve no mural antigo, nem o próprio autor", async () => {
+    await assertFails(setDoc(doc(alunoDb, `${antigo}/r2`),
+      { tipo: "texto", texto: "oi", uid: "uid-aluno", nome: "Aluno", createdAt: Date.now() }));
+    await recadoAntigo();
+    await assertFails(deleteDoc(doc(alunoDb, `${antigo}/r1`)));
+  });
+
+  it("115. só a coordenação apaga, para a limpeza final", async () => {
+    await recadoAntigo();
+    await assertFails(deleteDoc(doc(profDb, `${antigo}/r1`)));
+    await assertSucceeds(deleteDoc(doc(coordDb, `${antigo}/r1`)));
+  });
+});

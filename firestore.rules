@@ -588,34 +588,24 @@ service cloud.firestore {
                     && (resource.data.uid == request.auth.uid || ehCoord(escola));
     }
 
-    /* -------------- mural ANTIGO (raiz) — EM MIGRACAO, vai sair ---------- */
-    // ESTE e o vazamento A1. Continua aberto DE PROPOSITO ate o cliente novo
-    // estar no ar: fechar aqui antes disso tira o mural dos alunos sem lhes
-    // dar o novo. A sequencia esta em tools/migra-mural/RUNBOOK.md — o passo
-    // que fecha este bloco e o de numero 4, depois do deploy do cliente.
+    /* -------------- mural ANTIGO (raiz) — FECHADO em 26/09/2026 ---------- */
+    // Era o vazamento A1: o caminho `{col}/{item}/posts` não carrega escola
+    // nem série, então a regra só podia pedir "está logado" — qualquer conta
+    // criada no mundo lia todo recado de toda prova de toda turma.
     //
-    // Substituido por `schools/{escola}/series/{serie}/{itens*}/...` acima.
+    // Fechado na ordem do tools/migra-mural/RUNBOOK.md, depois de:
+    //   1. regras do mural novo no ar (schools/{escola}/series/{serie}/itens*);
+    //   2. vínculos e recados migrados — 26/09: 1 vínculo, 1 recado, conferidos;
+    //   3. produção servindo o cliente novo, que já não lê este caminho.
     //
-    // Ganho parcial anterior da V-09: tirado o 'murals-lab' (nenhuma página usa) e
-    // fechado o formato do post. A migração do mural para dentro de
-    // schools/{escola}/ continua pendente e está na nota de auditoria.
-    // Um nome por ambiente (ver public/app/env.js): produção usa 'murals' e
-    // cada lab tem o seu, para que testar num lab não escreva no mural de
-    // outro. A lista é fechada de propósito — sem ela, qualquer coleção de
-    // topo com uma subcoleção `posts` viraria mural.
+    // `delete` continua só para a coordenação, por causa da limpeza (RUNBOOK
+    // passo 6). Quando as coleções estiverem vazias, este bloco inteiro sai.
     function ehMural(col) {
       return col == 'murals' || col == 'murals-lab2' || col == 'murals-lab3';
     }
     match /{col}/{itemId}/posts/{postId} {
-      allow read: if signedIn() && ehMural(col);
-      allow create: if signedIn() && ehMural(col)
-                    && request.resource.data.uid == request.auth.uid
-                    && request.resource.data.keys().hasOnly(
-                         ['tipo', 'url', 'label', 'texto', 'uid', 'nome', 'createdAt'])
-                    && postOk(itemId, postId, request.resource.data);
-      allow delete: if signedIn() && ehMural(col)
-                    && resource.data.uid == request.auth.uid;
-      allow update: if false;
+      allow read, create, update: if false;
+      allow delete: if ehMural(col) && ehCoord('coc-atibaia');
     }
   }
 }
