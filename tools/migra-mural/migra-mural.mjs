@@ -31,7 +31,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { initializeApp, cert } from "firebase-admin/app";
+import { initializeApp } from "firebase-admin/app";
+import { credencial, PROJETO } from "../credencial.mjs";
 import { getFirestore } from "firebase-admin/firestore";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -53,12 +54,11 @@ if (!["backfill", "posts", "limpeza"].includes(fase)) {
   console.error("Uso: node tools/migra-mural/migra-mural.mjs <backfill|posts|limpeza> [--executar]");
   process.exit(1);
 }
-if (!existsSync(chave)) {
-  console.error("Falta .secrets/service-account.json — veja o cabeçalho deste arquivo.");
-  process.exit(1);
-}
-
-initializeApp({ credential: cert(JSON.parse(readFileSync(chave, "utf8"))) });
+/* credencial: chave de serviço se existir, senão o login do Firebase CLI
+   (ver tools/credencial.mjs — desde 25/09/2026 a chave é opcional) */
+const cred = credencial();
+initializeApp({ credential: cred.credential, projectId: PROJETO });
+console.log(`(credencial: ${cred.via})`);
 const db = getFirestore();
 
 const marca = executar ? "APLICANDO" : "SIMULAÇÃO (nada será escrito)";

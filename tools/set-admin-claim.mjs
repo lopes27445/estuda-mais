@@ -25,7 +25,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { initializeApp, cert } from "firebase-admin/app";
+import { initializeApp } from "firebase-admin/app";
+import { credencial, PROJETO } from "./credencial.mjs";
 import { getAuth } from "firebase-admin/auth";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,14 +39,10 @@ if (!email || !email.includes("@")) {
   console.error("Uso: node tools/set-admin-claim.mjs email@dominio.com [--tirar]");
   process.exit(1);
 }
-if (!existsSync(chave)) {
-  console.error("Não achei a chave de serviço em:\n  " + chave +
-    "\n\nGere em: console.firebase.google.com → Configurações do projeto → Contas de serviço" +
-    "\n→ Gerar nova chave privada. Salve com esse nome exato.");
-  process.exit(1);
-}
-
-initializeApp({ credential: cert(JSON.parse(readFileSync(chave, "utf8"))) });
+// chave de serviço se existir, senão o login do Firebase CLI (tools/credencial.mjs)
+const cred = credencial();
+initializeApp({ credential: cred.credential, projectId: PROJETO });
+console.log(`(credencial: ${cred.via})`);
 
 try {
   const u = await getAuth().getUserByEmail(email);
