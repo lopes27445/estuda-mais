@@ -1018,3 +1018,35 @@ describe("V-16 · valores com tipo e tamanho", () => {
     }));
   });
 });
+
+/* ============ V-23 — vínculo de membro não vaza para professor ============
+   `series/{serie}/membros/{uid}` guarda nome e sala de cada aluno aprovado.
+   A leitura era liberada para qualquer staff: depois do backfill da migração
+   do mural, qualquer professor listaria todos os alunos de todas as séries —
+   o mesmo vazamento de escopo fechado em salas/{sala}/alunos em 05/09. */
+describe("V-23 · vínculo de membro", () => {
+  const membros = `schools/${ESCOLA}/series/3/membros`;
+  async function vinculo() {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${membros}/uid-aluno`),
+        { uid: "uid-aluno", nome: "Aluno Teste", sala: "3A", desde: Date.now() });
+    });
+  }
+
+  it("110. professor NÃO lista os vínculos (nome e sala de todos os aprovados)", async () => {
+    await vinculo();
+    await assertFails(getDocs(collection(profDb, membros)));
+    await assertFails(getDoc(doc(profDb, `${membros}/uid-aluno`)));
+  });
+
+  it("111. o próprio aluno e a coordenação continuam lendo", async () => {
+    await vinculo();
+    await assertSucceeds(getDoc(doc(alunoDb, `${membros}/uid-aluno`)));
+    await assertSucceeds(getDocs(collection(coordDb, membros)));
+  });
+
+  it("112. o mural continua abrindo para o aluno aprovado (exists() não depende da leitura)", async () => {
+    await vinculo();
+    await assertSucceeds(getDocs(collection(alunoDb, `schools/${ESCOLA}/series/3/itens-lab2/p1/posts`)));
+  });
+});

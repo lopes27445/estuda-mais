@@ -519,8 +519,13 @@ service cloud.firestore {
     // Escrito SO pela coordenacao, junto da aprovacao da matricula.
     // O aluno nunca cria o proprio — seria o mesmo furo da autodeclaracao.
     match /schools/{escola}/series/{serie}/membros/{uid} {
+      // V-23 (25/09/2026): era `|| ehStaff(escola)` — QUALQUER professor
+      // listava nome e sala de todos os aprovados de todas as séries, o mesmo
+      // vazamento de escopo fechado em salas/{sala}/alunos em 05/09. Nenhuma
+      // tela do professor lê isto; a regra do mural usa exists(), que não
+      // depende desta permissão de leitura.
       allow read: if signedIn() && escolaConhecida(escola)
-                  && (request.auth.uid == uid || ehStaff(escola));
+                  && (request.auth.uid == uid || ehCoord(escola));
       allow create, update: if ehCoord(escola)
                             && request.resource.data.keys().hasOnly(
                                  ['uid', 'nome', 'sala', 'desde'])
